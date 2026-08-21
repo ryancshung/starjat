@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+*.db
+*.db-journal
+.DS_Store
+Thumbs.db
+.vercel
+.railway
+*.log
+.prisma/

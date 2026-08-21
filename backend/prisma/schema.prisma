@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 使用 String 取代 enum，相容性較好
+// Role: ADMIN | PARENT | CHILD
+// TransactionType: EARN | SPEND | ADJUST
+// TaskStatus / RedemptionStatus: PENDING | APPROVED | REJECTED
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("PARENT") // ADMIN | PARENT | CHILD
+  points       Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships       FamilyMember[]
+  pointTransactions PointTransaction[]
+  createdTasks      Task[]             @relation("TaskCreator")
+  taskCompletions   TaskCompletion[]
+  createdRewards    Reward[]           @relation("RewardCreator")
+  redemptions       RewardRedemption[]
+}
+
+model Family {
+  id         String   @id @default(cuid())
+  name       String
+  inviteCode String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  members FamilyMember[]
+  tasks   Task[]
+  rewards Reward[]
+}
+
+model FamilyMember {
+  id       String   @id @default(cuid())
+  familyId String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, userId])
+}
+
+model PointTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  type      String   // EARN | SPEND | ADJUST
+  reason    String
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id            String   @id @default(cuid())
+  familyId      String
+  createdById   String
+  title         String
+  description   String?
+  points        Int
+  isRecurring   Boolean  @default(false)
+  recurringType String?  // daily | weekly
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  family      Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("TaskCreator", fields: [createdById], references: [id])
+  completions TaskCompletion[]
+}
+
+model TaskCompletion {
+  id          String    @id @default(cuid())
+  taskId      String
+  userId      String
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  note        String?
+  completedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Reward {
+  id          String   @id @default(cuid())
+  familyId    String
+  createdById String
+  title       String
+  description String?
+  cost        Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  family      Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdBy   User               @relation("RewardCreator", fields: [createdById], references: [id])
+  redemptions RewardRedemption[]
+}
+
+model RewardRedemption {
+  id         String    @id @default(cuid())
+  rewardId   String
+  userId     String
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt  DateTime  @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+
+  reward Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
