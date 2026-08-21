@@ -9,7 +9,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 export interface JwtPayload {
   userId: string;
   email: string;
-  role: Role;
+  role: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {

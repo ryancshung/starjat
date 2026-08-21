@@ -38,7 +38,7 @@ router.post('/register', async (req, res: Response) => {
     }
 
     const passwordHash = await hashPassword(body.password);
-    let role: Role = body.role === 'CHILD' ? 'CHILD' : 'PARENT';
+    let role: string = body.role === 'CHILD' ? 'CHILD' : 'PARENT';
 
     // 第一位註冊的使用者自動成為 ADMIN
     const userCount = await prisma.user.count();
@@ -73,7 +73,7 @@ router.post('/register', async (req, res: Response) => {
     const token = signToken({
       userId: user.id,
       email: user.email,
-      role: user.role as Role,
+      role: user.role
     });
 
 role: user.role as Role,

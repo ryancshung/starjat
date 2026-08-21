@@ -27,7 +27,7 @@ export function authenticate(
   }
 }
 
-export function requireRoles(...roles: Role[]) {
+export function requireRoles(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: '未認證' });
