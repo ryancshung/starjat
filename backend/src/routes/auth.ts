@@ -73,18 +73,10 @@ router.post('/register', async (req, res: Response) => {
     const token = signToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as Role,
     });
 
-    res.status(201).json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        points: user.points,
-      },
+role: user.role as Role,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -117,7 +109,7 @@ router.post('/login', async (req, res: Response) => {
     const token = signToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as Role,
     });
 
     res.json({
