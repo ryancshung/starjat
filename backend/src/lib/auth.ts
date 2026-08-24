@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken';
 
 export type Role = 'ADMIN' | 'PARENT' | 'CHILD';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const defaultJwtSecret = process.env.JWT_SECRET || 'dev-secret';
+const defaultJwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface JwtPayload {
   userId: string;
@@ -23,14 +23,18 @@ export async function comparePassword(
   return bcrypt.compare(password, hash);
 }
 
-export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
+export function signToken(
+  payload: JwtPayload,
+  secret = defaultJwtSecret,
+  expiresIn = defaultJwtExpiresIn
+): string {
+  return jwt.sign(payload, secret, {
+    expiresIn: expiresIn as jwt.SignOptions['expiresIn'],
   });
 }
 
-export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_SECRET) as JwtPayload;
+export function verifyToken(token: string, secret = defaultJwtSecret): JwtPayload {
+  return jwt.verify(token, secret) as JwtPayload;
 }
 
 export function generateInviteCode(): string {

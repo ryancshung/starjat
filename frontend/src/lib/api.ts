@@ -69,6 +69,12 @@ export const api = {
 
   getMyFamily: () => request<{ family: Family | null }>('/api/families/me'),
 
+  updateMyFamily: (name: string) =>
+    request<{ family: Family }>('/api/families/me', {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
+
   removeMember: (userId: string) =>
     request<{ success: boolean }>(`/api/families/members/${userId}`, {
       method: 'DELETE',
@@ -103,6 +109,12 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  updateTask: (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'points' | 'isRecurring' | 'recurringType'>>) =>
+    request<{ task: Task }>(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteTask: (id: string) =>
+    request<{ success: boolean; archived: boolean }>(`/api/tasks/${id}`, { method: 'DELETE' }),
+
   completeTask: (id: string, note?: string) =>
     request(`/api/tasks/${id}/complete`, {
       method: 'POST',
@@ -131,6 +143,12 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost'>>) =>
+    request<{ reward: Reward }>(`/api/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteReward: (id: string) =>
+    request<{ success: boolean; archived: boolean }>(`/api/rewards/${id}`, { method: 'DELETE' }),
+
   redeemReward: (id: string) =>
     request(`/api/rewards/${id}/redeem`, { method: 'POST' }),
 
@@ -148,6 +166,11 @@ export const api = {
   getFamilies: () => request<{ families: Family[] }>('/api/admin/families'),
   deleteUser: (id: string) =>
     request(`/api/admin/users/${id}`, { method: 'DELETE' }),
+  updateUserRole: (id: string, role: User['role']) =>
+    request<{ user: Pick<User, 'id' | 'role'> }>(`/api/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+  updateFamily: (id: string, name: string) =>
+    request<{ family: Family }>(`/api/admin/families/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  deleteFamily: (id: string) => request<{ success: boolean }>(`/api/admin/families/${id}`, { method: 'DELETE' }),
 };
 
 // Types

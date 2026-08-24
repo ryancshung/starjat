@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { api } from '../lib/api';
+import { api, Task } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
 export default function Tasks() {
@@ -14,6 +14,7 @@ export default function Tasks() {
   });
 
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -27,14 +28,17 @@ export default function Tasks() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.createTask({
+      const payload = {
         title: form.title,
         description: form.description || undefined,
         points: form.points,
         isRecurring: form.isRecurring,
         recurringType: form.isRecurring ? form.recurringType : undefined,
-      });
+      };
+      if (editing) await api.updateTask(editing.id, payload);
+      else await api.createTask(payload);
       setOpen(false);
+      setEditing(null);
       setForm({
         title: '',
         description: '',
@@ -60,6 +64,18 @@ export default function Tasks() {
     }
   };
 
+  const startEdit = (task: Task) => {
+    setEditing(task);
+    setForm({ title: task.title, description: task.description ?? '', points: task.points, isRecurring: task.isRecurring, recurringType: task.recurringType === 'weekly' ? 'weekly' : 'daily' });
+    setOpen(true);
+  };
+
+  const handleDelete = async (task: Task) => {
+    if (!confirm(`確定要刪除「${task.title}」嗎？已有完成紀錄時會改為停用，以保留歷史。`)) return;
+    try { const result = await api.deleteTask(task.id); alert(result.archived ? '任務已停用，歷史紀錄已保留。' : '任務已刪除。'); qc.invalidateQueries({ queryKey: ['tasks'] }); }
+    catch (err) { alert(err instanceof Error ? err.message : '刪除失敗'); }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -81,10 +97,7 @@ export default function Tasks() {
       ) : (
         <div className="space-y-3">
           {data.tasks.map((task) => (
-            <div
-              key={task.id}
-              className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4"
-            >
+            <div key={task.id} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4">
               <div>
                 <div className="font-bold text-slate-800">{task.title}</div>
                 {task.description && (
@@ -101,7 +114,12 @@ export default function Tasks() {
                   )}
                 </div>
               </div>
-              {!isParent && (
+              {isParent ? (
+                <div className="flex gap-3 text-sm font-bold shrink-0">
+                  <button onClick={() => startEdit(task)} className="text-primary hover:underline">編輯</button>
+                  <button onClick={() => handleDelete(task)} className="text-red-500 hover:underline">刪除</button>
+                </div>
+              ) : (
                 <button
                   onClick={() => handleComplete(task.id)}
                   className="px-4 py-2 bg-secondary text-white font-bold rounded-xl text-sm shrink-0"
@@ -120,7 +138,7 @@ export default function Tasks() {
             onSubmit={handleCreate}
             className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
           >
-            <h3 className="font-extrabold text-lg">新增任務</h3>
+            <h3 className="font-extrabold text-lg">{editing ? '編輯任務' : '新增任務'}</h3>
             <input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
@@ -178,7 +196,7 @@ export default function Tasks() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setEditing(null); }}
                 className="flex-1 py-2 rounded-xl bg-slate-100 font-semibold"
               >
                 取消
@@ -188,7 +206,7 @@ export default function Tasks() {
                 disabled={loading}
                 className="flex-1 py-2 rounded-xl bg-primary text-white font-bold disabled:opacity-60"
               >
-                {loading ? '建立中...' : '建立'}
+              {loading ? '儲存中...' : editing ? '儲存' : '建立'}
               </button>
             </div>
           </form>

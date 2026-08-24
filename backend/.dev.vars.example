@@ -1,0 +1,5 @@
+# Neon pooled connection string; never commit the real value.
+DATABASE_URL="postgresql://USER:PASSWORD@ep-example.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+JWT_SECRET="replace-with-a-long-random-value"
+JWT_EXPIRES_IN="7d"
+CORS_ORIGIN="http://localhost:5173,https://your-app.vercel.app"

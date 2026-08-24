@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { api } from '../lib/api';
+import { api, Reward } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
 export default function Rewards() {
@@ -22,6 +22,7 @@ export default function Rewards() {
   const livePoints = balanceData?.points ?? user?.points ?? 0;
 
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Reward | null>(null);
   const [form, setForm] = useState({ title: '', description: '', cost: 10 });
   const [loading, setLoading] = useState(false);
 
@@ -29,12 +30,15 @@ export default function Rewards() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.createReward({
+      const payload = {
         title: form.title,
         description: form.description || undefined,
         cost: form.cost,
-      });
+      };
+      if (editing) await api.updateReward(editing.id, payload);
+      else await api.createReward(payload);
       setOpen(false);
+      setEditing(null);
       setForm({ title: '', description: '', cost: 10 });
       qc.invalidateQueries({ queryKey: ['rewards'] });
     } catch (err) {
@@ -57,6 +61,18 @@ export default function Rewards() {
     } catch (err) {
       alert(err instanceof Error ? err.message : '兌換失敗');
     }
+  };
+
+  const startEdit = (reward: Reward) => {
+    setEditing(reward);
+    setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost });
+    setOpen(true);
+  };
+
+  const handleDelete = async (reward: Reward) => {
+    if (!confirm(`確定要刪除「${reward.title}」嗎？已有兌換紀錄時會改為停用，以保留歷史。`)) return;
+    try { const result = await api.deleteReward(reward.id); alert(result.archived ? '獎勵已停用，歷史紀錄已保留。' : '獎勵已刪除。'); qc.invalidateQueries({ queryKey: ['rewards'] }); }
+    catch (err) { alert(err instanceof Error ? err.message : '刪除失敗'); }
   };
 
   return (
@@ -103,7 +119,12 @@ export default function Rewards() {
                 <span className="text-accent font-extrabold">
                   ⭐ {reward.cost}
                 </span>
-                {!isParent && (
+                {isParent ? (
+                  <div className="flex gap-3 text-sm font-bold">
+                    <button onClick={() => startEdit(reward)} className="text-primary hover:underline">編輯</button>
+                    <button onClick={() => handleDelete(reward)} className="text-red-500 hover:underline">刪除</button>
+                  </div>
+                ) : (
                   <button
                     onClick={() => handleRedeem(reward.id, reward.cost)}
                     className="px-4 py-1.5 bg-primary text-white font-bold rounded-xl text-sm"
@@ -123,7 +144,7 @@ export default function Rewards() {
             onSubmit={handleCreate}
             className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
           >
-            <h3 className="font-extrabold text-lg">新增獎勵</h3>
+            <h3 className="font-extrabold text-lg">{editing ? '編輯獎勵' : '新增獎勵'}</h3>
             <input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
@@ -156,7 +177,7 @@ export default function Rewards() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setEditing(null); }}
                 className="flex-1 py-2 rounded-xl bg-slate-100 font-semibold"
               >
                 取消
@@ -166,7 +187,7 @@ export default function Rewards() {
                 disabled={loading}
                 className="flex-1 py-2 rounded-xl bg-secondary text-white font-bold disabled:opacity-60"
               >
-                {loading ? '建立中...' : '建立'}
+              {loading ? '儲存中...' : editing ? '儲存' : '建立'}
               </button>
             </div>
           </form>

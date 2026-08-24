@@ -15,7 +15,10 @@ const PORT = Number(process.env.PORT) || 3001;
 // 支援多個來源：本機開發 + 正式前端網域（逗號分隔）
 const corsOrigins = (
   process.env.CORS_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173'
-).split(',').map((s) => s.trim());
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
@@ -24,7 +27,11 @@ app.use(
       if (!origin || corsOrigins.includes(origin) || corsOrigins.includes('*')) {
         callback(null, true);
       } else {
-        callback(null, true); // 開發友善；正式可改成 callback(new Error('Not allowed'))
+        const error = new Error('CORS origin not allowed') as Error & {
+          status?: number;
+        };
+        error.status = 403;
+        callback(error);
       }
     },
     credentials: true,
@@ -52,13 +59,15 @@ app.use((_req, res) => {
 // Error handler
 app.use(
   (
-    err: Error,
+    err: Error & { status?: number },
     _req: express.Request,
     res: express.Response,
     _next: express.NextFunction
   ) => {
     console.error(err);
-    res.status(500).json({ error: '伺服器錯誤' });
+    res.status(err.status ?? 500).json({
+      error: err.status === 403 ? '不允許的來源' : '伺服器錯誤',
+    });
   }
 );
 

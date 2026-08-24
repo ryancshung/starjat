@@ -14,6 +14,8 @@ export default function FamilyPage() {
   });
 
   const [copied, setCopied] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState('');
   const family = data?.family;
 
   const copyCode = () => {
@@ -35,7 +37,25 @@ export default function FamilyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-800">{family.name}</h1>
+        <div className="flex items-center gap-3">
+          {editingName ? (
+            <input value={name} onChange={(e) => setName(e.target.value)} className="px-3 py-1 rounded-lg border border-slate-200 font-bold" />
+          ) : <h1 className="text-2xl font-extrabold text-slate-800">{family.name}</h1>}
+          {isParent && (
+            <button
+              onClick={async () => {
+                if (!editingName) { setName(family.name); setEditingName(true); return; }
+                if (!name.trim()) return;
+                try { await api.updateMyFamily(name.trim()); qc.invalidateQueries({ queryKey: ['family'] }); setEditingName(false); }
+                catch (err) { alert(err instanceof Error ? err.message : '更新失敗'); }
+              }}
+              className="text-sm text-primary font-bold hover:underline"
+            >
+              {editingName ? '儲存' : '編輯名稱'}
+            </button>
+          )}
+          {editingName && <button onClick={() => setEditingName(false)} className="text-sm text-slate-500">取消</button>}
+        </div>
         <p className="text-slate-500 text-sm mt-1">家庭成員管理</p>
       </div>
 
