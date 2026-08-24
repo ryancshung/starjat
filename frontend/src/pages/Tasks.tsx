@@ -21,6 +21,7 @@ export default function Tasks() {
     points: 5,
     isRecurring: false,
     recurringType: 'daily' as 'daily' | 'weekly',
+    keepAfterCompletion: true,
   });
   const [loading, setLoading] = useState(false);
 
@@ -34,6 +35,7 @@ export default function Tasks() {
         points: form.points,
         isRecurring: form.isRecurring,
         recurringType: form.isRecurring ? form.recurringType : undefined,
+        keepAfterCompletion: form.keepAfterCompletion,
       };
       if (editing) await api.updateTask(editing.id, payload);
       else await api.createTask(payload);
@@ -45,6 +47,7 @@ export default function Tasks() {
         points: 5,
         isRecurring: false,
         recurringType: 'daily',
+        keepAfterCompletion: true,
       });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     } catch (err) {
@@ -66,8 +69,16 @@ export default function Tasks() {
 
   const startEdit = (task: Task) => {
     setEditing(task);
-    setForm({ title: task.title, description: task.description ?? '', points: task.points, isRecurring: task.isRecurring, recurringType: task.recurringType === 'weekly' ? 'weekly' : 'daily' });
+    setForm({ title: task.title, description: task.description ?? '', points: task.points, isRecurring: task.isRecurring, recurringType: task.recurringType === 'weekly' ? 'weekly' : 'daily', keepAfterCompletion: task.keepAfterCompletion });
     setOpen(true);
+  };
+
+  const moveTask = async (index: number, direction: -1 | 1) => {
+    const items = [...(data?.tasks ?? [])]; const next = index + direction;
+    if (next < 0 || next >= items.length) return;
+    [items[index], items[next]] = [items[next], items[index]];
+    try { await api.reorderTasks(items.map((task) => task.id)); qc.invalidateQueries({ queryKey: ['tasks'] }); }
+    catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
   };
 
   const handleDelete = async (task: Task) => {
@@ -96,7 +107,7 @@ export default function Tasks() {
         <p className="text-slate-400">目前沒有任務</p>
       ) : (
         <div className="space-y-3">
-          {data.tasks.map((task) => (
+          {data.tasks.map((task, index) => (
             <div key={task.id} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4">
               <div>
                 <div className="font-bold text-slate-800">{task.title}</div>
@@ -116,6 +127,8 @@ export default function Tasks() {
               </div>
               {isParent ? (
                 <div className="flex gap-3 text-sm font-bold shrink-0">
+                  <button disabled={index === 0} onClick={() => moveTask(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button>
+                  <button disabled={index === data.tasks.length - 1} onClick={() => moveTask(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button>
                   <button onClick={() => startEdit(task)} className="text-primary hover:underline">編輯</button>
                   <button onClick={() => handleDelete(task)} className="text-red-500 hover:underline">刪除</button>
                 </div>
@@ -193,6 +206,10 @@ export default function Tasks() {
                 <option value="weekly">每週</option>
               </select>
             )}
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.keepAfterCompletion} onChange={(e) => setForm((f) => ({ ...f, keepAfterCompletion: e.target.checked }))} />
+              核准完成後繼續保留此任務
+            </label>
             <div className="flex gap-2">
               <button
                 type="button"

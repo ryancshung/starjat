@@ -23,7 +23,7 @@ export default function Rewards() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Reward | null>(null);
-  const [form, setForm] = useState({ title: '', description: '', cost: 10 });
+  const [form, setForm] = useState({ title: '', description: '', cost: 10, keepAfterRedemption: true });
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -34,12 +34,13 @@ export default function Rewards() {
         title: form.title,
         description: form.description || undefined,
         cost: form.cost,
+        keepAfterRedemption: form.keepAfterRedemption,
       };
       if (editing) await api.updateReward(editing.id, payload);
       else await api.createReward(payload);
       setOpen(false);
       setEditing(null);
-      setForm({ title: '', description: '', cost: 10 });
+      setForm({ title: '', description: '', cost: 10, keepAfterRedemption: true });
       qc.invalidateQueries({ queryKey: ['rewards'] });
     } catch (err) {
       alert(err instanceof Error ? err.message : '建立失敗');
@@ -65,8 +66,16 @@ export default function Rewards() {
 
   const startEdit = (reward: Reward) => {
     setEditing(reward);
-    setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost });
+    setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost, keepAfterRedemption: reward.keepAfterRedemption });
     setOpen(true);
+  };
+
+  const moveReward = async (index: number, direction: -1 | 1) => {
+    const items = [...(data?.rewards ?? [])]; const next = index + direction;
+    if (next < 0 || next >= items.length) return;
+    [items[index], items[next]] = [items[next], items[index]];
+    try { await api.reorderRewards(items.map((reward) => reward.id)); qc.invalidateQueries({ queryKey: ['rewards'] }); }
+    catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
   };
 
   const handleDelete = async (reward: Reward) => {
@@ -102,7 +111,7 @@ export default function Rewards() {
         <p className="text-slate-400">目前沒有獎勵</p>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
-          {data.rewards.map((reward) => (
+          {data.rewards.map((reward, index) => (
             <div
               key={reward.id}
               className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"
@@ -121,6 +130,8 @@ export default function Rewards() {
                 </span>
                 {isParent ? (
                   <div className="flex gap-3 text-sm font-bold">
+                    <button disabled={index === 0} onClick={() => moveReward(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button>
+                    <button disabled={index === data.rewards.length - 1} onClick={() => moveReward(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button>
                     <button onClick={() => startEdit(reward)} className="text-primary hover:underline">編輯</button>
                     <button onClick={() => handleDelete(reward)} className="text-red-500 hover:underline">刪除</button>
                   </div>
@@ -174,6 +185,10 @@ export default function Rewards() {
                 className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200"
               />
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.keepAfterRedemption} onChange={(e) => setForm((f) => ({ ...f, keepAfterRedemption: e.target.checked }))} />
+              核准兌換後繼續保留此獎勵
+            </label>
             <div className="flex gap-2">
               <button
                 type="button"

@@ -76,6 +76,8 @@ model Task {
   isRecurring   Boolean  @default(false)
   recurringType String?  // daily | weekly
   isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  keepAfterCompletion Boolean @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -106,6 +108,8 @@ model Reward {
   description String?
   cost        Int
   isActive    Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  keepAfterRedemption Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -103,17 +103,19 @@ export const api = {
     points: number;
     isRecurring?: boolean;
     recurringType?: 'daily' | 'weekly';
+    keepAfterCompletion?: boolean;
   }) =>
     request<{ task: Task }>('/api/tasks', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateTask: (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'points' | 'isRecurring' | 'recurringType'>>) =>
+  updateTask: (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'points' | 'isRecurring' | 'recurringType' | 'keepAfterCompletion'>>) =>
     request<{ task: Task }>(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteTask: (id: string) =>
     request<{ success: boolean; archived: boolean }>(`/api/tasks/${id}`, { method: 'DELETE' }),
+  reorderTasks: (ids: string[]) => request<{ success: boolean }>('/api/tasks/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
 
   completeTask: (id: string, note?: string) =>
     request(`/api/tasks/${id}/complete`, {
@@ -137,17 +139,19 @@ export const api = {
     title: string;
     description?: string;
     cost: number;
+    keepAfterRedemption?: boolean;
   }) =>
     request<{ reward: Reward }>('/api/rewards', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost'>>) =>
+  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption'>>) =>
     request<{ reward: Reward }>(`/api/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteReward: (id: string) =>
     request<{ success: boolean; archived: boolean }>(`/api/rewards/${id}`, { method: 'DELETE' }),
+  reorderRewards: (ids: string[]) => request<{ success: boolean }>('/api/rewards/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
 
   redeemReward: (id: string) =>
     request(`/api/rewards/${id}/redeem`, { method: 'POST' }),
@@ -211,6 +215,7 @@ export interface Task {
   points: number;
   isRecurring: boolean;
   recurringType?: string;
+  keepAfterCompletion: boolean;
   completions?: TaskCompletion[];
 }
 
@@ -227,6 +232,7 @@ export interface Reward {
   title: string;
   description?: string;
   cost: number;
+  keepAfterRedemption: boolean;
 }
 
 export interface RewardRedemption {
