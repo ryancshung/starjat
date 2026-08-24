@@ -22,8 +22,13 @@ export default function Tasks() {
     isRecurring: false,
     recurringType: 'daily' as 'daily' | 'weekly',
     keepAfterCompletion: true,
+    maxCompletions: '',
+    groupId: '',
   });
   const [loading, setLoading] = useState(false);
+  const [sorting, setSorting] = useState(false);
+  const [draftOrder, setDraftOrder] = useState<string[]>([]);
+  const { data: groupsData } = useQuery({ queryKey: ['taskGroups'], queryFn: api.getTaskGroups, enabled: isParent });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +41,8 @@ export default function Tasks() {
         isRecurring: form.isRecurring,
         recurringType: form.isRecurring ? form.recurringType : undefined,
         keepAfterCompletion: form.keepAfterCompletion,
+        maxCompletions: form.maxCompletions ? Number(form.maxCompletions) : null,
+        groupId: form.groupId || null,
       };
       if (editing) await api.updateTask(editing.id, payload);
       else await api.createTask(payload);
@@ -48,6 +55,7 @@ export default function Tasks() {
         isRecurring: false,
         recurringType: 'daily',
         keepAfterCompletion: true,
+        maxCompletions: '', groupId: '',
       });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     } catch (err) {
@@ -69,16 +77,27 @@ export default function Tasks() {
 
   const startEdit = (task: Task) => {
     setEditing(task);
-    setForm({ title: task.title, description: task.description ?? '', points: task.points, isRecurring: task.isRecurring, recurringType: task.recurringType === 'weekly' ? 'weekly' : 'daily', keepAfterCompletion: task.keepAfterCompletion });
+    setForm({ title: task.title, description: task.description ?? '', points: task.points, isRecurring: task.isRecurring, recurringType: task.recurringType === 'weekly' ? 'weekly' : 'daily', keepAfterCompletion: task.keepAfterCompletion, maxCompletions: task.maxCompletions?.toString() ?? '', groupId: task.groupId ?? '' });
     setOpen(true);
   };
 
-  const moveTask = async (index: number, direction: -1 | 1) => {
-    const items = [...(data?.tasks ?? [])]; const next = index + direction;
+  const tasks = sorting
+    ? draftOrder.map((id) => data?.tasks.find((task) => task.id === id)).filter((task): task is Task => Boolean(task))
+    : (data?.tasks ?? []);
+
+  const moveTask = (index: number, direction: -1 | 1) => {
+    const items = [...draftOrder]; const next = index + direction;
     if (next < 0 || next >= items.length) return;
     [items[index], items[next]] = [items[next], items[index]];
-    try { await api.reorderTasks(items.map((task) => task.id)); qc.invalidateQueries({ queryKey: ['tasks'] }); }
-    catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
+    setDraftOrder(items);
+  };
+
+  const saveOrder = async () => {
+    try {
+      await api.reorderTasks(draftOrder);
+      setSorting(false);
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    } catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
   };
 
   const handleDelete = async (task: Task) => {
@@ -92,12 +111,11 @@ export default function Tasks() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold text-slate-800">任務</h1>
         {isParent && (
-          <button
-            onClick={() => setOpen(true)}
-            className="px-4 py-2 bg-primary text-white font-bold rounded-xl text-sm"
-          >
-            + 新增任務
-          </button>
+          <div className="flex gap-2">
+            <button onClick={async () => { const name=prompt('新增任務群組名稱'); if (!name?.trim()) return; try { await api.createTaskGroup(name.trim()); qc.invalidateQueries({queryKey:['taskGroups']}); } catch { alert('建立群組失敗，名稱可能重複'); } }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">+ 群組</button>
+            {sorting ? <><button onClick={() => { setSorting(false); setDraftOrder([]); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">取消排序</button><button onClick={saveOrder} className="px-3 py-2 bg-primary text-white font-bold rounded-xl text-sm">儲存排序</button></> : <button onClick={() => { setDraftOrder((data?.tasks ?? []).map((task) => task.id)); setSorting(true); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">排序</button>}
+            <button onClick={() => setOpen(true)} className="px-4 py-2 bg-primary text-white font-bold rounded-xl text-sm">+ 新增任務</button>
+          </div>
         )}
       </div>
 
@@ -107,10 +125,11 @@ export default function Tasks() {
         <p className="text-slate-400">目前沒有任務</p>
       ) : (
         <div className="space-y-3">
-          {data.tasks.map((task, index) => (
+          {tasks.map((task, index) => (
             <div key={task.id} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4">
               <div>
                 <div className="font-bold text-slate-800">{task.title}</div>
+                {task.group && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{task.group.name}</span>}
                 {task.description && (
                   <p className="text-sm text-slate-500 mt-0.5">
                     {task.description}
@@ -127,8 +146,7 @@ export default function Tasks() {
               </div>
               {isParent ? (
                 <div className="flex gap-3 text-sm font-bold shrink-0">
-                  <button disabled={index === 0} onClick={() => moveTask(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button>
-                  <button disabled={index === data.tasks.length - 1} onClick={() => moveTask(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button>
+                  {sorting && <><button disabled={index === 0} onClick={() => moveTask(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button><button disabled={index === tasks.length - 1} onClick={() => moveTask(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button></>}
                   <button onClick={() => startEdit(task)} className="text-primary hover:underline">編輯</button>
                   <button onClick={() => handleDelete(task)} className="text-red-500 hover:underline">刪除</button>
                 </div>
@@ -159,6 +177,10 @@ export default function Tasks() {
               placeholder="任務名稱"
               className="w-full px-3 py-2 rounded-xl border border-slate-200"
             />
+            <select value={form.groupId} onChange={(e) => setForm((f) => ({ ...f, groupId: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-slate-200">
+              <option value="">未分組</option>{groupsData?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </select>
+            <input type="number" min={1} value={form.maxCompletions} onChange={(e) => setForm((f) => ({ ...f, maxCompletions: e.target.value }))} placeholder="完成次數上限（留空不限）" className="w-full px-3 py-2 rounded-xl border border-slate-200" />
             <input
               value={form.description}
               onChange={(e) =>

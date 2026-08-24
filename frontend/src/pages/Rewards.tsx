@@ -23,8 +23,10 @@ export default function Rewards() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Reward | null>(null);
-  const [form, setForm] = useState({ title: '', description: '', cost: 10, keepAfterRedemption: true });
+  const [form, setForm] = useState({ title: '', description: '', cost: 10, keepAfterRedemption: true, maxRedemptions: '' });
   const [loading, setLoading] = useState(false);
+  const [sorting, setSorting] = useState(false);
+  const [draftOrder, setDraftOrder] = useState<string[]>([]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,12 +37,13 @@ export default function Rewards() {
         description: form.description || undefined,
         cost: form.cost,
         keepAfterRedemption: form.keepAfterRedemption,
+        maxRedemptions: form.maxRedemptions ? Number(form.maxRedemptions) : null,
       };
       if (editing) await api.updateReward(editing.id, payload);
       else await api.createReward(payload);
       setOpen(false);
       setEditing(null);
-      setForm({ title: '', description: '', cost: 10, keepAfterRedemption: true });
+      setForm({ title: '', description: '', cost: 10, keepAfterRedemption: true, maxRedemptions: '' });
       qc.invalidateQueries({ queryKey: ['rewards'] });
     } catch (err) {
       alert(err instanceof Error ? err.message : '建立失敗');
@@ -66,16 +69,27 @@ export default function Rewards() {
 
   const startEdit = (reward: Reward) => {
     setEditing(reward);
-    setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost, keepAfterRedemption: reward.keepAfterRedemption });
+    setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost, keepAfterRedemption: reward.keepAfterRedemption, maxRedemptions: reward.maxRedemptions?.toString() ?? '' });
     setOpen(true);
   };
 
-  const moveReward = async (index: number, direction: -1 | 1) => {
-    const items = [...(data?.rewards ?? [])]; const next = index + direction;
+  const rewards = sorting
+    ? draftOrder.map((id) => data?.rewards.find((reward) => reward.id === id)).filter((reward): reward is Reward => Boolean(reward))
+    : (data?.rewards ?? []);
+
+  const moveReward = (index: number, direction: -1 | 1) => {
+    const items = [...draftOrder]; const next = index + direction;
     if (next < 0 || next >= items.length) return;
     [items[index], items[next]] = [items[next], items[index]];
-    try { await api.reorderRewards(items.map((reward) => reward.id)); qc.invalidateQueries({ queryKey: ['rewards'] }); }
-    catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
+    setDraftOrder(items);
+  };
+
+  const saveOrder = async () => {
+    try {
+      await api.reorderRewards(draftOrder);
+      setSorting(false);
+      qc.invalidateQueries({ queryKey: ['rewards'] });
+    } catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
   };
 
   const handleDelete = async (reward: Reward) => {
@@ -96,12 +110,10 @@ export default function Rewards() {
           )}
         </div>
         {isParent && (
-          <button
-            onClick={() => setOpen(true)}
-            className="px-4 py-2 bg-secondary text-white font-bold rounded-xl text-sm"
-          >
-            + 新增獎勵
-          </button>
+          <div className="flex gap-2">
+            {sorting ? <><button onClick={() => { setSorting(false); setDraftOrder([]); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">取消排序</button><button onClick={saveOrder} className="px-3 py-2 bg-secondary text-white font-bold rounded-xl text-sm">儲存排序</button></> : <button onClick={() => { setDraftOrder((data?.rewards ?? []).map((reward) => reward.id)); setSorting(true); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">排序</button>}
+            <button onClick={() => setOpen(true)} className="px-4 py-2 bg-secondary text-white font-bold rounded-xl text-sm">+ 新增獎勵</button>
+          </div>
         )}
       </div>
 
@@ -111,7 +123,7 @@ export default function Rewards() {
         <p className="text-slate-400">目前沒有獎勵</p>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
-          {data.rewards.map((reward, index) => (
+          {rewards.map((reward, index) => (
             <div
               key={reward.id}
               className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"
@@ -130,8 +142,7 @@ export default function Rewards() {
                 </span>
                 {isParent ? (
                   <div className="flex gap-3 text-sm font-bold">
-                    <button disabled={index === 0} onClick={() => moveReward(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button>
-                    <button disabled={index === data.rewards.length - 1} onClick={() => moveReward(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button>
+                    {sorting && <><button disabled={index === 0} onClick={() => moveReward(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button><button disabled={index === rewards.length - 1} onClick={() => moveReward(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button></>}
                     <button onClick={() => startEdit(reward)} className="text-primary hover:underline">編輯</button>
                     <button onClick={() => handleDelete(reward)} className="text-red-500 hover:underline">刪除</button>
                   </div>
@@ -189,6 +200,7 @@ export default function Rewards() {
               <input type="checkbox" checked={form.keepAfterRedemption} onChange={(e) => setForm((f) => ({ ...f, keepAfterRedemption: e.target.checked }))} />
               核准兌換後繼續保留此獎勵
             </label>
+            <input type="number" min={1} value={form.maxRedemptions} onChange={(e) => setForm((f) => ({ ...f, maxRedemptions: e.target.value }))} placeholder="兌換次數上限（留空不限）" className="w-full px-3 py-2 rounded-xl border border-slate-200" />
             <div className="flex gap-2">
               <button
                 type="button"

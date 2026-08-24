@@ -39,6 +39,7 @@ model Family {
 
   members FamilyMember[]
   tasks   Task[]
+  taskGroups TaskGroup[]
   rewards Reward[]
 }
 
@@ -69,6 +70,7 @@ model PointTransaction {
 model Task {
   id            String   @id @default(cuid())
   familyId      String
+  groupId       String?
   createdById   String
   title         String
   description   String?
@@ -78,12 +80,28 @@ model Task {
   isActive      Boolean  @default(true)
   sortOrder     Int      @default(0)
   keepAfterCompletion Boolean @default(true)
+  maxCompletions Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   family      Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  group       TaskGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdBy   User             @relation("TaskCreator", fields: [createdById], references: [id])
   completions TaskCompletion[]
+}
+
+model TaskGroup {
+  id        String   @id @default(cuid())
+  familyId  String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  tasks  Task[]
+
+  @@unique([familyId, name])
 }
 
 model TaskCompletion {
@@ -110,6 +128,7 @@ model Reward {
   isActive    Boolean  @default(true)
   sortOrder  Int      @default(0)
   keepAfterRedemption Boolean @default(true)
+  maxRedemptions Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

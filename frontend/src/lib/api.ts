@@ -104,18 +104,24 @@ export const api = {
     isRecurring?: boolean;
     recurringType?: 'daily' | 'weekly';
     keepAfterCompletion?: boolean;
+    maxCompletions?: number | null;
+    groupId?: string | null;
   }) =>
     request<{ task: Task }>('/api/tasks', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateTask: (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'points' | 'isRecurring' | 'recurringType' | 'keepAfterCompletion'>>) =>
+  updateTask: (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'points' | 'isRecurring' | 'recurringType' | 'keepAfterCompletion' | 'maxCompletions' | 'groupId'>>) =>
     request<{ task: Task }>(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteTask: (id: string) =>
     request<{ success: boolean; archived: boolean }>(`/api/tasks/${id}`, { method: 'DELETE' }),
   reorderTasks: (ids: string[]) => request<{ success: boolean }>('/api/tasks/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  getTaskGroups: () => request<{ groups: TaskGroup[] }>('/api/tasks/groups'),
+  createTaskGroup: (name: string) => request<{ group: TaskGroup }>('/api/tasks/groups', { method: 'POST', body: JSON.stringify({ name }) }),
+  updateTaskGroup: (id: string, name: string) => request<{ group: TaskGroup }>(`/api/tasks/groups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  deleteTaskGroup: (id: string) => request<{ success: boolean }>(`/api/tasks/groups/${id}`, { method: 'DELETE' }),
 
   completeTask: (id: string, note?: string) =>
     request(`/api/tasks/${id}/complete`, {
@@ -140,13 +146,14 @@ export const api = {
     description?: string;
     cost: number;
     keepAfterRedemption?: boolean;
+    maxRedemptions?: number | null;
   }) =>
     request<{ reward: Reward }>('/api/rewards', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption'>>) =>
+  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption' | 'maxRedemptions'>>) =>
     request<{ reward: Reward }>(`/api/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteReward: (id: string) =>
@@ -216,6 +223,9 @@ export interface Task {
   isRecurring: boolean;
   recurringType?: string;
   keepAfterCompletion: boolean;
+  maxCompletions?: number | null;
+  groupId?: string | null;
+  group?: TaskGroup | null;
   completions?: TaskCompletion[];
 }
 
@@ -233,6 +243,7 @@ export interface Reward {
   description?: string;
   cost: number;
   keepAfterRedemption: boolean;
+  maxRedemptions?: number | null;
 }
 
 export interface RewardRedemption {
@@ -242,3 +253,5 @@ export interface RewardRedemption {
   reward: Reward;
   user: { id: string; name: string; points: number };
 }
+
+export interface TaskGroup { id: string; name: string; sortOrder: number; }
