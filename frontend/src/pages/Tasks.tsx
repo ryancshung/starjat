@@ -118,7 +118,7 @@ export default function Tasks() {
           <div className="flex gap-2">
             <button onClick={async () => { const name=prompt('新增任務群組名稱'); if (!name?.trim()) return; try { await api.createTaskGroup(name.trim()); qc.invalidateQueries({queryKey:['taskGroups']}); } catch { alert('建立群組失敗，名稱可能重複'); } }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">+ 群組</button>
             {sorting ? <><button onClick={() => { setSorting(false); setDraftOrder([]); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">取消排序</button><button onClick={saveOrder} className="px-3 py-2 bg-primary text-white font-bold rounded-xl text-sm">儲存排序</button></> : <button onClick={() => { setDraftOrder((data?.tasks ?? []).map((task) => task.id)); setSorting(true); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">排序</button>}
-            <button onClick={() => window.print()} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm print:hidden">列印 A4</button>
+            <button onClick={() => window.print()} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm print:hidden">列印</button>
             <button onClick={() => setOpen(true)} className="px-4 py-2 bg-primary text-white font-bold rounded-xl text-sm">+ 新增任務</button>
           </div>
         )}
@@ -132,10 +132,10 @@ export default function Tasks() {
         <>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setGroupFilter('all')} className={`px-3 py-1 rounded-full text-sm ${groupFilter==='all'?'bg-primary text-white':'bg-white text-slate-600'}`}>全部</button>
-          <button onClick={() => setGroupFilter('ungrouped')} className={`px-3 py-1 rounded-full text-sm ${groupFilter==='ungrouped'?'bg-primary text-white':'bg-white text-slate-600'}`}>未分組</button>
           {groupsData?.groups.map((g)=><button key={g.id} onClick={()=>setGroupFilter(g.id)} className={`px-3 py-1 rounded-full text-sm ${groupFilter===g.id?'bg-primary text-white':'bg-white text-slate-600'}`}>{g.name}</button>)}
+          {data.tasks.some((task) => !task.groupId) && <button onClick={() => setGroupFilter('ungrouped')} className={`px-3 py-1 rounded-full text-sm ${groupFilter==='ungrouped'?'bg-primary text-white':'bg-white text-slate-600'}`}>未分組</button>}
         </div>
-        <div className="space-y-3">
+        <div className="space-y-3 print:grid print:grid-cols-2 print:gap-3 print:space-y-0">
           {tasks.map((task, index) => (
             <div key={task.id} draggable={isParent} onDragStart={()=>setDraggingId(task.id)} onDragOver={(e)=>e.preventDefault()} onDrop={()=>dropTask(task.id)} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4 print:break-inside-avoid print:border-slate-300">
               <div>

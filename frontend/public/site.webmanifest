@@ -1,0 +1,9 @@
+{
+  "name": "StarJar 孩子獎勵系統",
+  "short_name": "StarJar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e6f7ff",
+  "theme_color": "#147db6",
+  "icons": [{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}
