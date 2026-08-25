@@ -44,6 +44,24 @@ model Family {
   taskGroups TaskGroup[]
   rewards Reward[]
   wishes  Wish[]
+  scheduledAwards ScheduledAward[]
+}
+
+model ScheduledAward {
+  id          String   @id @default(cuid())
+  familyId    String
+  userId      String
+  createdById String
+  name        String
+  amount      Int
+  frequency   String   // daily | weekly | monthly
+  startAt     DateTime @default(now())
+  lastPaidAt  DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 }
 
 model FamilyMember {

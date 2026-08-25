@@ -7,6 +7,8 @@ import pointsRoutes from './worker-routes/points';
 import adminRoutes from './worker-routes/admin';
 import tasksRoutes from './worker-routes/tasks';
 import rewardsRoutes from './worker-routes/rewards';
+import scheduledAwardRoutes from './worker-routes/scheduled-awards';
+import { runScheduledAwards } from './lib/scheduled-awards';
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
 
@@ -35,6 +37,7 @@ app.route('/api/points', pointsRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/tasks', tasksRoutes);
 app.route('/api/rewards', rewardsRoutes);
+app.route('/api/scheduled-awards', scheduledAwardRoutes);
 
 app.notFound((c) => c.json({ error: '找不到此 API' }, 404));
 
@@ -43,4 +46,9 @@ app.onError((error, c) => {
   return c.json({ error: '伺服器錯誤' }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled: (_event: ScheduledEvent, env: WorkerEnv, ctx: ExecutionContext) => {
+    ctx.waitUntil(runScheduledAwards(env));
+  },
+};

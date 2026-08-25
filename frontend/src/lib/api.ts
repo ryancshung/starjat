@@ -93,6 +93,10 @@ export const api = {
     ),
 
   getBalance: () => request<{ points: number }>('/api/points/balance'),
+  getScheduledAwards: () => request<{ schedules: ScheduledAward[] }>('/api/scheduled-awards'),
+  createScheduledAward: (data: Omit<ScheduledAward, 'id' | 'lastPaidAt' | 'isActive' | 'user'> & { isActive?: boolean }) => request<{ schedule: ScheduledAward }>('/api/scheduled-awards', { method:'POST', body:JSON.stringify(data) }),
+  updateScheduledAward: (id:string, data: Partial<Omit<ScheduledAward, 'id' | 'lastPaidAt' | 'user'>>) => request<{ schedule: ScheduledAward }>(`/api/scheduled-awards/${id}`, { method:'PUT', body:JSON.stringify(data) }),
+  deleteScheduledAward: (id:string) => request<{ success:boolean }>(`/api/scheduled-awards/${id}`, { method:'DELETE' }),
 
   // Tasks
   getTasks: () => request<{ tasks: Task[] }>('/api/tasks'),
@@ -222,6 +226,7 @@ export interface PointTransaction {
   reason: string;
   createdAt: string;
 }
+export interface ScheduledAward { id:string; userId:string; name:string; amount:number; frequency:'daily'|'weekly'|'monthly'; startAt:string; lastPaidAt?:string|null; isActive:boolean; user?:{id:string;name:string}; }
 
 export interface Task {
   id: string;

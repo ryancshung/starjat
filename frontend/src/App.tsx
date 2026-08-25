@@ -10,6 +10,7 @@ import Rewards from './pages/Rewards';
 import FamilyPage from './pages/Family';
 import History from './pages/History';
 import Admin from './pages/Admin';
+import ScheduledAwards from './pages/ScheduledAwards';
 import Layout from './components/Layout';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="rewards" element={<Rewards />} />
         <Route path="family" element={<FamilyPage />} />
         <Route path="history" element={<History />} />
+        <Route path="scheduled-awards" element={<ScheduledAwards />} />
         <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

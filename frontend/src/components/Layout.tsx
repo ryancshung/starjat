@@ -7,6 +7,7 @@ import {
   Users,
   History,
   Shield,
+  CalendarClock,
   LogOut,
 } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export default function Layout() {
   if (isAdmin) {
     nav.push({ to: '/app/admin', icon: Shield, label: '管理' });
   }
+  if (isParent) nav.splice(4, 0, { to: '/app/scheduled-awards', icon: CalendarClock, label: '定期派發' });
 
   return (
     <div className="min-h-screen flex flex-col bg-cream">
