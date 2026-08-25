@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StarJar 使用說明書</title>
+  <style>
+    :root { --blue:#147db6; --sky:#e9f8ff; --gold:#f6ab19; --ink:#1e3a4c; --muted:#64748b; }
+    * { box-sizing:border-box; } body { margin:0; font:16px/1.7 system-ui,-apple-system,"Noto Sans TC",sans-serif; color:var(--ink); background:#f6fbfe; }
+    .hero { background:linear-gradient(135deg,#1274af,#42b9e9); color:#fff; padding:64px 24px; text-align:center; }
+    .hero .mark { font-size:52px; } h1 { margin:6px 0; font-size:40px; } h2 { color:var(--blue); margin-top:48px; border-bottom:3px solid #bde8f8; padding-bottom:8px; } h3 { margin:26px 0 8px; }
+    main { max-width:920px; margin:0 auto; background:#fff; padding:24px 56px 64px; box-shadow:0 8px 30px #0d587014; } .intro { font-size:18px; color:#35566a; }
+    .toc { background:var(--sky); border-radius:16px; padding:18px 24px; } .toc a { color:var(--blue); text-decoration:none; }
+    .role { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; } .card { border:1px solid #dbeef5; border-radius:16px; padding:18px; background:#fcfeff; }
+    .tip { background:#fff7dc; border-left:5px solid var(--gold); padding:12px 16px; border-radius:8px; margin:18px 0; } .note { color:var(--muted); font-size:14px; }
+    ol,ul { padding-left:24px; } li+li { margin-top:5px; } .steps { counter-reset:step; list-style:none; padding:0; } .steps li { counter-increment:step; margin:10px 0; padding-left:42px; position:relative; } .steps li::before { content:counter(step); position:absolute; left:0; top:1px; width:27px; height:27px; text-align:center; border-radius:50%; color:#fff; background:var(--blue); font-weight:700; line-height:27px; }
+    table { width:100%; border-collapse:collapse; margin:12px 0; } th,td { border:1px solid #dbe6eb; padding:10px; text-align:left; } th { background:#eefaff; color:#17698f; }
+    footer { text-align:center; color:var(--muted); padding-top:40px; } @media(max-width:640px){ main{padding:20px;}h1{font-size:32px}.role{grid-template-columns:1fr;} } @media print{ body{background:#fff}.hero{padding:28px}main{box-shadow:none;padding:0}h2{break-after:avoid}.card,.tip{break-inside:avoid} }
+  </style>
+</head>
+<body>
+  <header class="hero"><div class="mark">⭐</div><h1>StarJar 使用說明書</h1><div>讓孩子在完成任務、實現願望的過程中累積星星</div></header>
+  <main>
+    <p class="intro">StarJar 是家庭專用的任務與獎勵系統。家長建立任務、核准完成情況並管理獎勵；孩子完成任務後累積星星，再用星星兌換喜歡的獎勵。</p>
+    <nav class="toc"><strong>目錄</strong><ol><li><a href="#start">開始使用與家庭邀請</a></li><li><a href="#tasks">任務管理</a></li><li><a href="#rewards">獎勵、折扣與許願</a></li><li><a href="#schedule">定期派發星星</a></li><li><a href="#history">星星紀錄與列印</a></li><li><a href="#ios">iPhone 加入主畫面</a></li></ol></nav>
+
+    <h2 id="start">1. 開始使用與家庭邀請</h2>
+    <div class="role"><div class="card"><h3>建立家庭的家長</h3><p>註冊家長帳號時不填邀請碼，接著建立家庭名稱。此帳號是<strong>家庭擁有者</strong>，可以管理家庭名稱、邀請碼與成員。</p></div><div class="card"><h3>受邀家長與孩子</h3><p>註冊時填入家庭邀請碼即可加入既有家庭。受邀家長可以建立任務、獎勵及審核，但不能管理成員名單。</p></div></div>
+    <h3>邀請成員</h3><ol class="steps"><li>家庭擁有者開啟「家庭」頁面。</li><li>複製家庭邀請碼並傳給對方。</li><li>對方在註冊頁選擇身分，填入邀請碼後完成註冊。</li></ol>
+    <div class="tip">家庭邀請碼可供家長或孩子使用；孩子只會看到自己的星星與可完成／兌換的內容。</div>
+
+    <h2 id="tasks">2. 任務管理</h2>
+    <h3>家長：新增與設定任務</h3><ul><li>在「任務」頁按 <strong>＋新增任務</strong>，輸入名稱、說明與完成後的星星數。</li><li>可建立群組（例如：早晨、學校、家事），並將任務放入群組。</li><li>可設定每日或每週重複、完成次數上限，以及核准後是否繼續保留。</li><li>按「排序」後可拖曳任務或使用上下鍵調整；按「儲存排序」才會正式套用。</li></ul>
+    <h3>孩子：完成任務</h3><ol class="steps"><li>開啟任務列表，使用群組標籤切換瀏覽。</li><li>按任務右側的「完成」。</li><li>等待家長在首頁／待審核項目中核准。</li><li>核准後星星會自動加入孩子帳戶。</li></ol>
+
+    <h2 id="rewards">3. 獎勵、折扣與許願</h2>
+    <h3>獎勵</h3><p>家長可新增獎勵、設定所需星星、兌換次數上限與是否在兌換後保留。孩子在「獎勵」頁按「兌換」後，仍需家長核准才會扣除星星。</p>
+    <h3>折扣管理</h3><ul><li>按「折扣管理」可對<strong>全部獎勵</strong>套用相同折扣與期間；這會覆蓋每個獎勵原有的個別折扣。</li><li>按單一獎勵的「編輯」可設定或修改個別折扣、開始與到期時間。</li><li>到期時間留空代表長期折扣，直到家長手動取消。折扣中的獎勵卡會顯示折扣與到期日。</li></ul>
+    <h3>孩子許願</h3><ol class="steps"><li>孩子在「獎勵」頁下方的「許願區」輸入想要的獎勵。</li><li>家長查看願望後，選擇「核准」並填入所需星星數，或選擇婉拒。</li><li>核准的願望會自動加入獎勵列表。</li></ol>
+
+    <h2 id="schedule">4. 定期派發星星</h2>
+    <p>家長可從導覽列開啟「定期派發」，建立固定星星來源，例如零用星星、閱讀獎勵。</p>
+    <ol class="steps"><li>按「＋新增設定」。</li><li>選擇孩子、填寫名稱與星星數量。</li><li>選擇每天、每週或每月，並可指定開始時間。</li><li>建立後可隨時暫停、重新啟用或刪除。</li></ol>
+    <div class="tip">系統每天約台灣時間上午 08:00 檢查一次。符合設定週期的項目會自動發放，並寫入星星紀錄。</div>
+
+    <h2 id="history">5. 星星紀錄與列印</h2>
+    <p>「紀錄」頁可查看星星獲得與支出的明細。家長在任務頁按「列印」，可開啟瀏覽器列印視窗；建議選擇 A4、直向，系統會使用雙欄任務磚塊版面以節省紙張。</p>
+
+    <h2 id="ios">6. iPhone 加入主畫面</h2>
+    <ol class="steps"><li>用 Safari 開啟 StarJar 網站。</li><li>按底部「分享」按鈕。</li><li>選擇「加入主畫面」，確認名稱後按「加入」。</li></ol>
+    <p class="note">若已建立過舊捷徑但圖示沒有更新，請先從主畫面刪除舊捷徑，再重新加入一次。</p>
+    <footer>StarJar 使用說明書 · 可直接以瀏覽器列印或另存為 PDF</footer>
+  </main>
+</body>
+</html>
