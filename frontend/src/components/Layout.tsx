@@ -8,6 +8,7 @@ import {
   History,
   Shield,
   CalendarClock,
+  CircleHelp,
   LogOut,
 } from 'lucide-react';
 
@@ -23,6 +24,7 @@ export default function Layout() {
     { to: '/app/rewards', icon: Gift, label: '獎勵' },
     { to: '/app/family', icon: Users, label: '家庭' },
     { to: '/app/history', icon: History, label: '紀錄' },
+    { to: '/app/guide', icon: CircleHelp, label: '說明' },
   ];
   if (isAdmin) {
     nav.push({ to: '/app/admin', icon: Shield, label: '管理' });
