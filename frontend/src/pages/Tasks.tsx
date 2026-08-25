@@ -28,6 +28,8 @@ export default function Tasks() {
   const [loading, setLoading] = useState(false);
   const [sorting, setSorting] = useState(false);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [groupFilter, setGroupFilter] = useState('all');
   const { data: groupsData } = useQuery({ queryKey: ['taskGroups'], queryFn: api.getTaskGroups, enabled: isParent });
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -81,9 +83,11 @@ export default function Tasks() {
     setOpen(true);
   };
 
-  const tasks = sorting
+  const tasks = (sorting
     ? draftOrder.map((id) => data?.tasks.find((task) => task.id === id)).filter((task): task is Task => Boolean(task))
-    : (data?.tasks ?? []);
+    : (data?.tasks ?? [])).filter((task) => groupFilter === 'all' || groupFilter === 'ungrouped' ? (groupFilter === 'all' || !task.groupId) : task.groupId === groupFilter);
+
+  const dropTask = (targetId: string) => { if (!draggingId || draggingId === targetId) return; const all = sorting ? [...draftOrder] : (data?.tasks ?? []).map((task) => task.id); const from=all.indexOf(draggingId), to=all.indexOf(targetId); all.splice(to,0,all.splice(from,1)[0]); setDraftOrder(all); setSorting(true); setDraggingId(null); };
 
   const moveTask = (index: number, direction: -1 | 1) => {
     const items = [...draftOrder]; const next = index + direction;
@@ -114,6 +118,7 @@ export default function Tasks() {
           <div className="flex gap-2">
             <button onClick={async () => { const name=prompt('新增任務群組名稱'); if (!name?.trim()) return; try { await api.createTaskGroup(name.trim()); qc.invalidateQueries({queryKey:['taskGroups']}); } catch { alert('建立群組失敗，名稱可能重複'); } }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">+ 群組</button>
             {sorting ? <><button onClick={() => { setSorting(false); setDraftOrder([]); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">取消排序</button><button onClick={saveOrder} className="px-3 py-2 bg-primary text-white font-bold rounded-xl text-sm">儲存排序</button></> : <button onClick={() => { setDraftOrder((data?.tasks ?? []).map((task) => task.id)); setSorting(true); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">排序</button>}
+            <button onClick={() => window.print()} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm print:hidden">列印 A4</button>
             <button onClick={() => setOpen(true)} className="px-4 py-2 bg-primary text-white font-bold rounded-xl text-sm">+ 新增任務</button>
           </div>
         )}
@@ -124,9 +129,15 @@ export default function Tasks() {
       ) : !data?.tasks?.length ? (
         <p className="text-slate-400">目前沒有任務</p>
       ) : (
+        <>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setGroupFilter('all')} className={`px-3 py-1 rounded-full text-sm ${groupFilter==='all'?'bg-primary text-white':'bg-white text-slate-600'}`}>全部</button>
+          <button onClick={() => setGroupFilter('ungrouped')} className={`px-3 py-1 rounded-full text-sm ${groupFilter==='ungrouped'?'bg-primary text-white':'bg-white text-slate-600'}`}>未分組</button>
+          {groupsData?.groups.map((g)=><button key={g.id} onClick={()=>setGroupFilter(g.id)} className={`px-3 py-1 rounded-full text-sm ${groupFilter===g.id?'bg-primary text-white':'bg-white text-slate-600'}`}>{g.name}</button>)}
+        </div>
         <div className="space-y-3">
           {tasks.map((task, index) => (
-            <div key={task.id} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4">
+            <div key={task.id} draggable={isParent} onDragStart={()=>setDraggingId(task.id)} onDragOver={(e)=>e.preventDefault()} onDrop={()=>dropTask(task.id)} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4 print:break-inside-avoid print:border-slate-300">
               <div>
                 <div className="font-bold text-slate-800">{task.title}</div>
                 {task.group && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{task.group.name}</span>}
@@ -161,6 +172,7 @@ export default function Tasks() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {open && (

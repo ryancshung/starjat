@@ -25,9 +25,9 @@ export default function Register() {
         email: form.email,
         password: form.password,
         role: form.role,
-        inviteCode: form.role === 'CHILD' ? form.inviteCode : undefined,
+        inviteCode: form.inviteCode || undefined,
       });
-      if (form.role === 'PARENT') {
+      if (form.role === 'PARENT' && !form.inviteCode) {
         navigate('/onboarding');
       } else {
         navigate('/app');
@@ -112,10 +112,10 @@ export default function Register() {
             />
           </div>
 
-          {form.role === 'CHILD' && (
+          <div>
             <div>
               <label className="block text-sm font-semibold text-slate-600 mb-1">
-                家庭邀請碼
+                家庭邀請碼（選填）
               </label>
               <input
                 value={form.inviteCode}
@@ -125,15 +125,14 @@ export default function Register() {
                     inviteCode: e.target.value.toUpperCase(),
                   }))
                 }
-                required
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/40 tracking-widest font-mono text-center text-lg"
                 placeholder="例如 ABC123"
               />
               <p className="text-xs text-slate-400 mt-1">
-                請向家長索取 6 碼邀請碼
+                家長填寫後會加入既有家庭；留空則可建立新家庭。
               </p>
             </div>
-          )}
+          </div>
 
           <button
             type="submit"

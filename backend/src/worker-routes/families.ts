@@ -17,7 +17,7 @@ families.post('/', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
     let inviteCode = generateInviteCode();
     while (await prisma.family.findUnique({ where: { inviteCode } })) inviteCode = generateInviteCode();
     const family = await prisma.family.create({
-      data: { name: body.data.name, inviteCode, members: { create: { userId } } },
+      data: { name: body.data.name, inviteCode, ownerId: userId, members: { create: { userId } } },
       include: { members: { include: { user: { select: memberSelect } } } },
     });
     return c.json({ family }, 201);
@@ -60,6 +60,8 @@ families.put('/me', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => 
   try {
     const membership = await prisma.familyMember.findFirst({ where: { userId: c.get('user').userId } });
     if (!membership) return c.json({ error: '您尚未加入家庭' }, 404);
+    const mine = await prisma.family.findUnique({ where: { id: membership.familyId } });
+    if (!mine || mine.ownerId !== c.get('user').userId) return c.json({ error: '只有建立家庭的家長可以修改家庭資料' }, 403);
     const family = await prisma.family.update({ where: { id: membership.familyId }, data: { name: body.data.name } });
     return c.json({ family });
   } catch (error) { console.error(error); return c.json({ error: '更新家庭名稱失敗' }, 500); }
@@ -72,8 +74,9 @@ families.delete('/members/:userId', authenticate, requireRoles('PARENT', 'ADMIN'
     const userId = c.get('user').userId;
     const targetUserId = c.req.param('userId');
     if (targetUserId === userId) return c.json({ error: '不能移除自己' }, 400);
-    const mine = await prisma.familyMember.findFirst({ where: { userId } });
+    const mine = await prisma.familyMember.findFirst({ where: { userId }, include: { family: true } });
     if (!mine) return c.json({ error: '您不在任何家庭中' }, 403);
+    if (mine.family.ownerId !== userId) return c.json({ error: '只有建立家庭的家長可以管理成員' }, 403);
     const target = await prisma.familyMember.findFirst({ where: { familyId: mine.familyId, userId: targetUserId } });
     if (!target) return c.json({ error: '成員不存在' }, 404);
     await prisma.familyMember.delete({ where: { id: target.id } });

@@ -147,18 +147,25 @@ export const api = {
     cost: number;
     keepAfterRedemption?: boolean;
     maxRedemptions?: number | null;
+    discountPercent?: number | null;
+    discountStart?: string | null;
+    discountEnd?: string | null;
   }) =>
     request<{ reward: Reward }>('/api/rewards', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption' | 'maxRedemptions'>>) =>
+  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption' | 'maxRedemptions' | 'discountPercent' | 'discountStart' | 'discountEnd'>>) =>
     request<{ reward: Reward }>(`/api/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteReward: (id: string) =>
     request<{ success: boolean; archived: boolean }>(`/api/rewards/${id}`, { method: 'DELETE' }),
   reorderRewards: (ids: string[]) => request<{ success: boolean }>('/api/rewards/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  setAllRewardDiscounts: (percent: number | null, start: string | null, end: string | null) => request<{ success: boolean }>('/api/rewards/discount/all', { method: 'PUT', body: JSON.stringify({ percent, start, end }) }),
+  getWishes: () => request<{ wishes: Wish[] }>('/api/rewards/wishes'),
+  createWish: (title: string, description?: string) => request<{ wish: Wish }>('/api/rewards/wishes', { method: 'POST', body: JSON.stringify({ title, description }) }),
+  reviewWish: (id: string, status: 'APPROVED' | 'REJECTED', cost?: number) => request(`/api/rewards/wishes/${id}`, { method: 'PUT', body: JSON.stringify({ status, cost }) }),
 
   redeemReward: (id: string) =>
     request(`/api/rewards/${id}/redeem`, { method: 'POST' }),
@@ -201,6 +208,7 @@ export interface Family {
   id: string;
   name: string;
   inviteCode: string;
+  ownerId: string;
   members: {
     id: string;
     user: User;
@@ -244,7 +252,11 @@ export interface Reward {
   cost: number;
   keepAfterRedemption: boolean;
   maxRedemptions?: number | null;
+  discountPercent?: number | null;
+  discountStart?: string | null;
+  discountEnd?: string | null;
 }
+export interface Wish { id:string; title:string; description?:string; status:'PENDING'|'APPROVED'|'REJECTED'; user:{id:string;name:string}; }
 
 export interface RewardRedemption {
   id: string;

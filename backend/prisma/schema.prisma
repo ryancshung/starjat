@@ -28,12 +28,14 @@ model User {
   taskCompletions   TaskCompletion[]
   createdRewards    Reward[]           @relation("RewardCreator")
   redemptions       RewardRedemption[]
+  wishes            Wish[]
 }
 
 model Family {
   id         String   @id @default(cuid())
   name       String
   inviteCode String   @unique
+  ownerId    String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -41,6 +43,7 @@ model Family {
   tasks   Task[]
   taskGroups TaskGroup[]
   rewards Reward[]
+  wishes  Wish[]
 }
 
 model FamilyMember {
@@ -129,12 +132,30 @@ model Reward {
   sortOrder  Int      @default(0)
   keepAfterRedemption Boolean @default(true)
   maxRedemptions Int?
+  discountPercent Int?
+  discountStart DateTime?
+  discountEnd DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   family      Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
   createdBy   User               @relation("RewardCreator", fields: [createdById], references: [id])
   redemptions RewardRedemption[]
+}
+
+model Wish {
+  id        String   @id @default(cuid())
+  familyId  String
+  userId    String
+  title     String
+  description String?
+  status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RewardRedemption {

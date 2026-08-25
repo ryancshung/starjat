@@ -43,7 +43,7 @@ auth.post('/register', async (c) => {
       },
     });
 
-    if (body.role === 'CHILD' && body.inviteCode) {
+    if (body.inviteCode) {
       const family = await prisma.family.findUnique({
         where: { inviteCode: body.inviteCode.toUpperCase() },
       });

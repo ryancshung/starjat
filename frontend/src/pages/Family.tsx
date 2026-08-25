@@ -17,6 +17,7 @@ export default function FamilyPage() {
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState('');
   const family = data?.family;
+  const isOwner = family?.ownerId === user?.id || user?.role === 'ADMIN';
 
   const copyCode = () => {
     if (!family) return;
@@ -41,7 +42,7 @@ export default function FamilyPage() {
           {editingName ? (
             <input value={name} onChange={(e) => setName(e.target.value)} className="px-3 py-1 rounded-lg border border-slate-200 font-bold" />
           ) : <h1 className="text-2xl font-extrabold text-slate-800">{family.name}</h1>}
-          {isParent && (
+          {isOwner && (
             <button
               onClick={async () => {
                 if (!editingName) { setName(family.name); setEditingName(true); return; }
@@ -59,7 +60,7 @@ export default function FamilyPage() {
         <p className="text-slate-500 text-sm mt-1">家庭成員管理</p>
       </div>
 
-      {isParent && (
+      {isOwner && (
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
           <div className="text-sm font-semibold text-slate-600 mb-2">
             邀請碼（給孩子註冊用）
@@ -109,7 +110,7 @@ export default function FamilyPage() {
                   </div>
                 </div>
               </div>
-              {isParent && m.id !== user?.id && m.role === 'CHILD' && (
+              {isOwner && m.id !== user?.id && (
                 <button
                   onClick={async () => {
                     if (!confirm(`確定要移除 ${m.name} 嗎？`)) return;
