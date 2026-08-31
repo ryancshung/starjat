@@ -8,6 +8,12 @@ import pointsRoutes from './routes/points';
 import tasksRoutes from './routes/tasks';
 import rewardsRoutes from './routes/rewards';
 import adminRoutes from './routes/admin';
+import scheduledAwardRoutes from './routes/scheduled-awards';
+import allowanceRoutes from './routes/allowance';
+import reportRoutes from './routes/reports';
+import trophyRoutes from './routes/trophies';
+import { prisma } from './lib/prisma';
+import { processScheduledAwards } from './lib/scheduled-awards';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -50,6 +56,10 @@ app.use('/api/points', pointsRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/rewards', rewardsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/scheduled-awards', scheduledAwardRoutes);
+app.use('/api/allowance', allowanceRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/trophies', trophyRoutes);
 
 // 404
 app.use((_req, res) => {
@@ -74,3 +84,10 @@ app.use(
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`StarJar API running on port ${PORT}`);
 });
+
+// Express 備援環境沒有 Cloudflare Cron，以固定輪詢執行相同的排程邏輯。
+const scheduledAwardTimer = setInterval(() => {
+  void processScheduledAwards(prisma).catch(() => undefined);
+}, 60_000);
+scheduledAwardTimer.unref();
+void processScheduledAwards(prisma).catch(() => undefined);

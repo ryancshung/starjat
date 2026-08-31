@@ -10,4 +10,29 @@ body {
 #root {
   min-height: 100vh;
 }
-@media print { @page { size:A4; margin:12mm; } body { background:white; } header, nav, .print\:hidden, button { display:none !important; } main { max-width:none !important; padding:0 !important; } h1 { color:#147db6 !important; margin-bottom:12px; } h1:after { content:'　任務清單'; font-size:14px; color:#64748b; } .print\:grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px !important; } .print\:break-inside-avoid { break-inside:avoid; min-height:105px; background:#f8fcff !important; border:1px solid #b9def1 !important; box-shadow:none !important; } }
+
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { background: white; }
+  body > #root > div > header,
+  body > #root > div > nav,
+  .print\:hidden { display: none !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  .monthly-report { border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+  .monthly-report .report-child { break-inside: avoid; }
+  .monthly-report footer { margin-top: 14mm; }
+}

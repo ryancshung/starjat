@@ -8,6 +8,8 @@ import {
   History,
   Shield,
   CalendarClock,
+  Trophy,
+  ChartNoAxesColumnIncreasing,
   CircleHelp,
   LogOut,
 } from 'lucide-react';
@@ -22,14 +24,16 @@ export default function Layout() {
     { to: '/app', icon: Home, label: '首頁', end: true },
     { to: '/app/tasks', icon: ListTodo, label: '任務' },
     { to: '/app/rewards', icon: Gift, label: '獎勵' },
+    { to: '/app/trophies', icon: Trophy, label: '獎盃' },
+    { to: '/app/scheduled-awards', icon: CalendarClock, label: '零用錢' },
     { to: '/app/family', icon: Users, label: '家庭' },
     { to: '/app/history', icon: History, label: '紀錄' },
+    { to: '/app/reports', icon: ChartNoAxesColumnIncreasing, label: '月報' },
     { to: '/app/guide', icon: CircleHelp, label: '說明' },
   ];
   if (isAdmin) {
     nav.push({ to: '/app/admin', icon: Shield, label: '管理' });
   }
-  if (isParent) nav.splice(4, 0, { to: '/app/scheduled-awards', icon: CalendarClock, label: '定期派發' });
 
   return (
     <div className="min-h-screen flex flex-col bg-cream">
@@ -98,14 +102,14 @@ export default function Layout() {
 
       {/* Bottom nav (mobile only) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20 safe-area-pb">
-        <div className="flex justify-around py-2">
+        <div className="flex justify-start overflow-x-auto py-2">
           {nav.map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 px-2 py-1 text-xs ${
+                `flex min-w-[4.5rem] flex-col items-center gap-0.5 px-2 py-1 text-xs ${
                   isActive ? 'text-primary font-bold' : 'text-slate-500'
                 }`
               }

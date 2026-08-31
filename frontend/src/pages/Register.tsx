@@ -49,7 +49,7 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-50 text-red-600 text-sm px-4 py-2 rounded-xl">
+            <div role="alert" className="bg-red-50 text-red-600 text-sm px-4 py-2 rounded-xl">
               {error}
             </div>
           )}
@@ -59,6 +59,7 @@ export default function Register() {
               <button
                 key={r}
                 type="button"
+                aria-pressed={form.role === r}
                 onClick={() => setForm((f) => ({ ...f, role: r }))}
                 className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition ${
                   form.role === r
@@ -72,10 +73,11 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-slate-600 mb-1">
+            <label htmlFor="register-name" className="block text-sm font-semibold text-slate-600 mb-1">
               暱稱
             </label>
             <input
+              id="register-name"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               required
@@ -84,10 +86,11 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-600 mb-1">
+            <label htmlFor="register-email" className="block text-sm font-semibold text-slate-600 mb-1">
               Email
             </label>
             <input
+              id="register-email"
               type="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
@@ -96,10 +99,11 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-600 mb-1">
+            <label htmlFor="register-password" className="block text-sm font-semibold text-slate-600 mb-1">
               密碼
             </label>
             <input
+              id="register-password"
               type="password"
               value={form.password}
               onChange={(e) =>
@@ -114,10 +118,11 @@ export default function Register() {
 
           <div>
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-1">
+              <label htmlFor="register-invite" className="block text-sm font-semibold text-slate-600 mb-1">
                 家庭邀請碼（選填）
               </label>
               <input
+                id="register-invite"
                 value={form.inviteCode}
                 onChange={(e) =>
                   setForm((f) => ({

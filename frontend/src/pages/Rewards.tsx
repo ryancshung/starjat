@@ -1,246 +1,68 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CalendarDays, Gift, LockKeyhole, RotateCcw, Tag } from 'lucide-react';
 import { api, Reward } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
+const emptyForm = { title: '', description: '', cost: 10, keepAfterRedemption: true, maxRedemptions: '', discountPercent: '', discountStart: '', discountEnd: '', availabilityMode: 'ALWAYS' as Reward['availabilityMode'], availableStartTime: '', availableEndTime: '', availableDates: '' };
+const availabilityLabels = { ALWAYS: '隨時開放', WEEKENDS: '僅週六、週日', DATES: '僅指定日期', WEEKENDS_OR_DATES: '週末或指定日期' };
+const statusLabels = { PENDING: '等待家長核准', APPROVED: '已核准', REJECTED: '未核准', CANCELLED: '已撤回' };
+
 export default function Rewards() {
-  const { user, refreshUser } = useAuth();
-  const qc = useQueryClient();
+  const { user } = useAuth();
   const isParent = user?.role === 'PARENT' || user?.role === 'ADMIN';
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['rewards'],
-    queryFn: api.getRewards,
-  });
-
-  const { data: balanceData } = useQuery({
-    queryKey: ['balance'],
-    queryFn: api.getBalance,
-    enabled: !isParent,
-    refetchInterval: 3000,
-  });
-  const livePoints = balanceData?.points ?? user?.points ?? 0;
-
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({ queryKey: ['rewards'], queryFn: api.getRewards });
+  const { data: balance } = useQuery({ queryKey: ['balance'], queryFn: api.getBalance, enabled: !isParent });
+  const { data: myRedemptions } = useQuery({ queryKey: ['myRedemptions'], queryFn: api.getMyRedemptions, enabled: !isParent });
+  const { data: wishes } = useQuery({ queryKey: ['wishes'], queryFn: api.getWishes });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Reward | null>(null);
-  const [form, setForm] = useState({ title: '', description: '', cost: 10, keepAfterRedemption: true, maxRedemptions: '', discountPercent: '', discountStart: '', discountEnd: '' });
+  const [wishOpen, setWishOpen] = useState(false);
+  const [wishForm, setWishForm] = useState({ title: '', description: '' });
+  const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
-  const [sorting, setSorting] = useState(false);
-  const [draftOrder, setDraftOrder] = useState<string[]>([]);
-  const [wishTitle, setWishTitle] = useState('');
-  const [discountOpen, setDiscountOpen] = useState(false);
-  const [globalDiscount, setGlobalDiscount] = useState({ percent: '', start: '', end: '' });
-  const { data: wishesData } = useQuery({ queryKey: ['wishes'], queryFn: api.getWishes });
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const payload = {
-        title: form.title,
-        description: form.description || undefined,
-        cost: form.cost,
-        keepAfterRedemption: form.keepAfterRedemption,
-        maxRedemptions: form.maxRedemptions ? Number(form.maxRedemptions) : null,
-        discountPercent: form.discountPercent ? Number(form.discountPercent) : null,
-        discountStart: form.discountStart ? new Date(form.discountStart).toISOString() : null,
-        discountEnd: form.discountEnd ? new Date(form.discountEnd).toISOString() : null,
-      };
-      if (editing) await api.updateReward(editing.id, payload);
-      else await api.createReward(payload);
-      setOpen(false);
-      setEditing(null);
-      setForm({ title: '', description: '', cost: 10, keepAfterRedemption: true, maxRedemptions: '', discountPercent: '', discountStart: '', discountEnd: '' });
-      qc.invalidateQueries({ queryKey: ['rewards'] });
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '建立失敗');
-    } finally {
-      setLoading(false);
+  const openEditor = (reward?: Reward) => {
+    if (!reward) { setEditing(null); setForm(emptyForm); }
+    else {
+      setEditing(reward);
+      setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost, keepAfterRedemption: reward.keepAfterRedemption, maxRedemptions: reward.maxRedemptions?.toString() ?? '', discountPercent: reward.discountPercent?.toString() ?? '', discountStart: reward.discountStart?.slice(0, 16) ?? '', discountEnd: reward.discountEnd?.slice(0, 16) ?? '', availabilityMode: reward.availabilityMode ?? 'ALWAYS', availableStartTime: reward.availableStartTime ?? '', availableEndTime: reward.availableEndTime ?? '', availableDates: reward.availableDates?.map((item) => item.date).join(', ') ?? '' });
     }
-  };
-
-  const handleRedeem = async (id: string, cost: number) => {
-    if (livePoints < cost) {
-      alert('星星不夠哦！');
-      return;
-    }
-    if (!confirm('確定要申請兌換嗎？需家長審核。')) return;
-    try {
-      await api.redeemReward(id);
-      alert('已送出兌換申請！');
-      await refreshUser();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '兌換失敗');
-    }
-  };
-
-  const startEdit = (reward: Reward) => {
-    setEditing(reward);
-    setForm({ title: reward.title, description: reward.description ?? '', cost: reward.cost, keepAfterRedemption: reward.keepAfterRedemption, maxRedemptions: reward.maxRedemptions?.toString() ?? '', discountPercent: reward.discountPercent?.toString() ?? '', discountStart: reward.discountStart ? reward.discountStart.slice(0, 16) : '', discountEnd: reward.discountEnd ? reward.discountEnd.slice(0, 16) : '' });
     setOpen(true);
   };
 
-  const rewards = sorting
-    ? draftOrder.map((id) => data?.rewards.find((reward) => reward.id === id)).filter((reward): reward is Reward => Boolean(reward))
-    : (data?.rewards ?? []);
-
-  const moveReward = (index: number, direction: -1 | 1) => {
-    const items = [...draftOrder]; const next = index + direction;
-    if (next < 0 || next >= items.length) return;
-    [items[index], items[next]] = [items[next], items[index]];
-    setDraftOrder(items);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault(); setLoading(true);
+    const payload = { title: form.title, description: form.description || undefined, cost: Number(form.cost), keepAfterRedemption: form.keepAfterRedemption, maxRedemptions: form.maxRedemptions ? Number(form.maxRedemptions) : null, discountPercent: form.discountPercent ? Number(form.discountPercent) : null, discountStart: form.discountStart ? new Date(form.discountStart).toISOString() : null, discountEnd: form.discountEnd ? new Date(form.discountEnd).toISOString() : null, availabilityMode: form.availabilityMode, availableStartTime: form.availableStartTime || null, availableEndTime: form.availableEndTime || null, availableDates: form.availableDates.split(/[\s,，]+/).map((item) => item.trim()).filter(Boolean) };
+    try { if (editing) await api.updateReward(editing.id, payload); else await api.createReward(payload); setOpen(false); qc.invalidateQueries({ queryKey: ['rewards'] }); }
+    catch (error) { alert(error instanceof Error ? error.message : '儲存失敗'); }
+    finally { setLoading(false); }
   };
-
-  const saveOrder = async () => {
-    try {
-      await api.reorderRewards(draftOrder);
-      setSorting(false);
-      qc.invalidateQueries({ queryKey: ['rewards'] });
-    } catch (err) { alert(err instanceof Error ? err.message : '排序失敗'); }
-  };
-
-  const handleDelete = async (reward: Reward) => {
-    if (!confirm(`確定要刪除「${reward.title}」嗎？已有兌換紀錄時會改為停用，以保留歷史。`)) return;
-    try { const result = await api.deleteReward(reward.id); alert(result.archived ? '獎勵已停用，歷史紀錄已保留。' : '獎勵已刪除。'); qc.invalidateQueries({ queryKey: ['rewards'] }); }
-    catch (err) { alert(err instanceof Error ? err.message : '刪除失敗'); }
-  };
-  const discountActive = (reward: Reward) => Boolean(reward.discountPercent && (!reward.discountStart || new Date(reward.discountStart) <= new Date()) && (!reward.discountEnd || new Date(reward.discountEnd) >= new Date()));
-  const formatDate = (value?: string | null) => value ? new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '長期有效';
-  const applyAllDiscount = async () => { try { await api.setAllRewardDiscounts(globalDiscount.percent ? Number(globalDiscount.percent) : null, globalDiscount.start ? new Date(globalDiscount.start).toISOString() : null, globalDiscount.end ? new Date(globalDiscount.end).toISOString() : null); setDiscountOpen(false); qc.invalidateQueries({ queryKey: ['rewards'] }); } catch (err) { alert(err instanceof Error ? err.message : '設定失敗'); } };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-800">獎勵</h1>
-          {!isParent && (
-            <p className="text-sm text-slate-500">
-              你有 ⭐ {livePoints} 星星
-            </p>
-          )}
-        </div>
-        {isParent && (
-          <div className="flex gap-2">
-            <button onClick={()=>setDiscountOpen(true)} className="px-3 py-2 bg-amber-100 text-amber-800 font-bold rounded-xl text-sm">折扣管理</button>
-            {sorting ? <><button onClick={() => { setSorting(false); setDraftOrder([]); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">取消排序</button><button onClick={saveOrder} className="px-3 py-2 bg-secondary text-white font-bold rounded-xl text-sm">儲存排序</button></> : <button onClick={() => { setDraftOrder((data?.rewards ?? []).map((reward) => reward.id)); setSorting(true); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">排序</button>}
-            <button onClick={() => setOpen(true)} className="px-4 py-2 bg-secondary text-white font-bold rounded-xl text-sm">+ 新增獎勵</button>
-          </div>
-        )}
-      </div>
+    <div className="space-y-7">
+      <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-extrabold text-slate-800">獎勵商店</h1><p className="mt-1 text-sm text-slate-500">{isParent ? '建立獎勵與開放日期' : `可用 ⭐ ${balance?.availablePoints ?? 0} · 保留 ⭐ ${balance?.reservedPoints ?? 0}`}</p></div><div className="flex gap-2">{isParent ? <button type="button" onClick={() => openEditor()} className="rounded-xl bg-secondary px-4 py-2 text-sm font-bold text-white">新增獎勵</button> : <button type="button" onClick={() => setWishOpen(true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">許下願望</button>}</div></header>
 
-      {isLoading ? (
-        <p className="text-slate-400">載入中...</p>
-      ) : !data?.rewards?.length ? (
-        <p className="text-slate-400">目前沒有獎勵</p>
-      ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
-          {rewards.map((reward, index) => (
-            <div
-              key={reward.id}
-              className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"
-            >
-              <div className="font-bold text-slate-800 text-lg">
-                {reward.title}
-              </div>
-              {reward.description && (
-                <p className="text-sm text-slate-500 mt-1">
-                  {reward.description}
-                </p>
-              )}
-              {discountActive(reward) && <div className="mt-2 inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600">🏷️ {reward.discountPercent}% 折扣 · {reward.discountEnd ? `到 ${formatDate(reward.discountEnd)}` : '長期有效'}</div>}
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-accent font-extrabold">
-                  {discountActive(reward) ? <><span className="text-slate-400 line-through mr-1">⭐ {reward.cost}</span> ⭐ {Math.ceil(reward.cost * (100 - (reward.discountPercent ?? 0)) / 100)} <span className="text-xs text-red-500">-{reward.discountPercent}%</span></> : <>⭐ {reward.cost}</>}
-                </span>
-                {isParent ? (
-                  <div className="flex gap-3 text-sm font-bold">
-                    {sorting && <><button disabled={index === 0} onClick={() => moveReward(index, -1)} className="text-slate-500 disabled:opacity-30">↑</button><button disabled={index === rewards.length - 1} onClick={() => moveReward(index, 1)} className="text-slate-500 disabled:opacity-30">↓</button></>}
-                    <button onClick={() => startEdit(reward)} className="text-primary hover:underline">編輯</button>
-                    <button onClick={() => handleDelete(reward)} className="text-red-500 hover:underline">刪除</button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleRedeem(reward.id, reward.cost)}
-                    className="px-4 py-1.5 bg-primary text-white font-bold rounded-xl text-sm"
-                  >
-                    兌換
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {isLoading ? <p role="status" className="text-slate-500">載入中...</p> : !data?.rewards.length ? <div className="rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500"><Gift className="mx-auto mb-2" />目前沒有獎勵</div> : <div className="grid gap-4 sm:grid-cols-2">{data.rewards.map((reward) => {
+        const available = reward.availability?.available !== false;
+        const pending = myRedemptions?.redemptions.find((item) => item.reward.id === reward.id && item.status === 'PENDING');
+        const cost = reward.effectiveCost ?? reward.cost;
+        return <article key={reward.id} className={`rounded-2xl border bg-white p-5 ${available ? 'border-slate-100' : 'border-slate-200 bg-slate-50'}`}>
+          <div className="flex items-start justify-between gap-3"><div><h2 className="font-extrabold text-slate-800">{reward.title}</h2>{reward.description && <p className="mt-1 text-sm text-slate-500">{reward.description}</p>}</div>{!available && <LockKeyhole className="shrink-0 text-slate-400" size={20} />}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><span className="font-extrabold text-amber-600">⭐ {cost}</span>{reward.discountPercent && cost !== reward.cost && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-600"><Tag size={12} />{reward.discountPercent}% 折扣</span>}<span className="inline-flex items-center gap-1 text-xs text-slate-500"><CalendarDays size={13} />{availabilityLabels[reward.availabilityMode]}</span></div>
+          {!available && <div className="mt-3 rounded-xl bg-slate-200/70 p-3 text-xs text-slate-700"><strong>{reward.availability?.reason}</strong>{reward.availability?.nextAvailableAt && <div>下次開放：{new Date(reward.availability.nextAvailableAt).toLocaleString('zh-TW')}</div>}</div>}
+          {isParent ? <div className="mt-4 flex gap-3 text-sm font-bold"><button type="button" onClick={() => openEditor(reward)} className="text-primary">編輯</button><button type="button" onClick={async () => { if (!window.confirm(`確定移除「${reward.title}」嗎？`)) return; await api.deleteReward(reward.id); qc.invalidateQueries({ queryKey: ['rewards'] }); }} className="text-red-600">移除</button></div> : <div className="mt-4">{pending ? <button type="button" onClick={async () => { await api.cancelRedemption(pending.id); qc.invalidateQueries({ queryKey: ['myRedemptions'] }); qc.invalidateQueries({ queryKey: ['balance'] }); }} className="inline-flex items-center gap-1 text-sm font-bold text-red-600"><RotateCcw size={14} />撤回待審申請</button> : <button type="button" disabled={!available || cost > (balance?.availablePoints ?? 0)} onClick={async () => { try { await api.redeemReward(reward.id); qc.invalidateQueries({ queryKey: ['myRedemptions'] }); qc.invalidateQueries({ queryKey: ['balance'] }); } catch (error) { alert(error instanceof Error ? error.message : '申請失敗'); } }} className="w-full rounded-xl bg-secondary py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{available ? '申請兌換' : '尚未開放'}</button>}</div>}
+        </article>;
+      })}</div>}
 
-      <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm space-y-3">
-        <h2 className="font-bold text-slate-700">✨ 許願區</h2>
-        {!isParent && <form onSubmit={async e=>{e.preventDefault();if(!wishTitle.trim())return;try{await api.createWish(wishTitle.trim());setWishTitle('');qc.invalidateQueries({queryKey:['wishes']});alert('願望已送出給家長！')}catch(err){alert(err instanceof Error?err.message:'送出失敗')}}} className="flex gap-2"><input value={wishTitle} onChange={e=>setWishTitle(e.target.value)} placeholder="我想要的獎勵..." className="flex-1 px-3 py-2 rounded-xl border border-slate-200"/><button className="px-4 py-2 bg-primary text-white font-bold rounded-xl">許願</button></form>}
-        {wishesData?.wishes.map(w=><div key={w.id} className="flex justify-between text-sm border-t pt-2"><span>{w.title} {isParent&&<span className="text-slate-400">· {w.user.name}</span>}</span>{isParent&&w.status==='PENDING'?<div className="flex gap-2"><button onClick={async()=>{const v=prompt('核准後所需星星數');const cost=Number(v);if(!cost)return;await api.reviewWish(w.id,'APPROVED',cost);qc.invalidateQueries({queryKey:['wishes']});qc.invalidateQueries({queryKey:['rewards']})}} className="text-primary font-bold">核准</button><button onClick={async()=>{await api.reviewWish(w.id,'REJECTED');qc.invalidateQueries({queryKey:['wishes']})}} className="text-red-500">婉拒</button></div>:<span className="text-slate-400">{w.status==='PENDING'?'等待家長確認':w.status==='APPROVED'?'已加入獎勵':'未核准'}</span>}</div>)}
-      </section>
+      {!isParent && myRedemptions?.redemptions.length ? <section><h2 className="mb-2 font-extrabold">我的兌換紀錄</h2><div className="space-y-2">{myRedemptions.redemptions.slice(0, 10).map((item) => <div key={item.id} className="flex justify-between rounded-xl border border-slate-100 bg-white p-3 text-sm"><span>{item.reward.title}</span><span className="text-slate-500">{statusLabels[item.status]}</span></div>)}</div></section> : null}
 
-      {discountOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl"><div><h2 className="text-lg font-extrabold">折扣管理</h2><p className="text-sm text-slate-500">可逐一點「編輯」管理個別折扣；以下設定會覆蓋所有獎勵的折扣與期間。</p></div><div className="rounded-xl bg-amber-50 p-4 space-y-3"><label className="block text-sm font-bold text-amber-900">全部套用折扣</label><input type="number" min={1} max={99} value={globalDiscount.percent} onChange={e=>setGlobalDiscount(v=>({...v,percent:e.target.value}))} placeholder="折扣 %（留空後儲存 = 全部取消）" className="w-full rounded-xl border border-amber-200 px-3 py-2"/><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs text-slate-600">開始時間（留空立即開始）<input type="datetime-local" value={globalDiscount.start} onChange={e=>setGlobalDiscount(v=>({...v,start:e.target.value}))} className="mt-1 w-full rounded-xl border border-amber-200 px-3 py-2"/></label><label className="text-xs text-slate-600">到期時間（留空長期有效）<input type="datetime-local" value={globalDiscount.end} onChange={e=>setGlobalDiscount(v=>({...v,end:e.target.value}))} className="mt-1 w-full rounded-xl border border-amber-200 px-3 py-2"/></label></div></div><div className="flex gap-2"><button onClick={()=>setDiscountOpen(false)} className="flex-1 rounded-xl bg-slate-100 py-2 font-bold">取消</button><button onClick={applyAllDiscount} className="flex-1 rounded-xl bg-amber-500 py-2 font-bold text-white">套用到全部</button></div></div></div>}
+      <section className="rounded-2xl border border-blue-100 bg-blue-50 p-5"><div className="flex items-center justify-between"><h2 className="font-extrabold text-slate-800">願望清單</h2>{!isParent && <button type="button" onClick={() => setWishOpen(true)} className="text-sm font-bold text-primary">新增</button>}</div><div className="mt-3 space-y-2">{!wishes?.wishes.length ? <p className="text-sm text-slate-500">目前沒有願望。</p> : wishes.wishes.map((wish) => <div key={wish.id} className="flex flex-col justify-between gap-2 border-t border-blue-100 pt-2 text-sm sm:flex-row"><span>{wish.title}{isParent && <span className="text-slate-500"> · {wish.user.name}</span>}</span>{isParent && wish.status === 'PENDING' ? <div className="flex gap-3"><button type="button" onClick={async () => { const value = window.prompt('核准後所需星星數'); const cost = Number(value); if (!cost) return; await api.reviewWish(wish.id, 'APPROVED', cost); qc.invalidateQueries({ queryKey: ['wishes'] }); qc.invalidateQueries({ queryKey: ['rewards'] }); }} className="font-bold text-primary">核准</button><button type="button" onClick={async () => { await api.reviewWish(wish.id, 'REJECTED'); qc.invalidateQueries({ queryKey: ['wishes'] }); }} className="text-red-600">婉拒</button></div> : <span className="text-slate-500">{wish.status === 'PENDING' ? '等待家長確認' : wish.status === 'APPROVED' ? '已加入獎勵' : '未核准'}</span>}</div>)}</div></section>
 
-      {open && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <form
-            onSubmit={handleCreate}
-            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
-          >
-            <h3 className="font-extrabold text-lg">{editing ? '編輯獎勵' : '新增獎勵'}</h3>
-            <input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              required
-              placeholder="獎勵名稱"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200"
-            />
-            <input
-              value={form.description}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, description: e.target.value }))
-              }
-              placeholder="說明（選填）"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200"
-            />
-            <div>
-              <label className="text-sm font-semibold text-slate-600">
-                所需星星
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={form.cost}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, cost: Number(e.target.value) }))
-                }
-                className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200"
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.keepAfterRedemption} onChange={(e) => setForm((f) => ({ ...f, keepAfterRedemption: e.target.checked }))} />
-              核准兌換後繼續保留此獎勵
-            </label>
-            <input type="number" min={1} value={form.maxRedemptions} onChange={(e) => setForm((f) => ({ ...f, maxRedemptions: e.target.value }))} placeholder="兌換次數上限（留空不限）" className="w-full px-3 py-2 rounded-xl border border-slate-200" />
-            <div className="rounded-xl bg-amber-50 p-3 space-y-2"><div className="flex items-center justify-between text-sm font-bold text-amber-800"><span>折扣設定</span><button type="button" onClick={()=>setForm(f=>({...f,discountPercent:'',discountStart:'',discountEnd:''}))} className="text-xs text-red-500">取消此折扣</button></div><input type="number" min={1} max={99} value={form.discountPercent} onChange={e=>setForm(f=>({...f,discountPercent:e.target.value}))} placeholder="折扣百分比，例如 20" className="w-full px-3 py-2 rounded-xl border border-amber-200" /><div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-600">開始時間（留空立即）<input type="datetime-local" value={form.discountStart} onChange={e=>setForm(f=>({...f,discountStart:e.target.value}))} className="mt-1 w-full px-2 py-2 rounded-xl border border-amber-200" /></label><label className="text-xs text-slate-600">到期時間（留空長期）<input type="datetime-local" value={form.discountEnd} onChange={e=>setForm(f=>({...f,discountEnd:e.target.value}))} className="mt-1 w-full px-2 py-2 rounded-xl border border-amber-200" /></label></div></div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => { setOpen(false); setEditing(null); }}
-                className="flex-1 py-2 rounded-xl bg-slate-100 font-semibold"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-2 rounded-xl bg-secondary text-white font-bold disabled:opacity-60"
-              >
-              {loading ? '儲存中...' : editing ? '儲存' : '建立'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {open && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"><form onSubmit={save} className="my-6 w-full max-w-lg space-y-4 rounded-2xl bg-white p-6" role="dialog" aria-modal="true" aria-labelledby="reward-form-title"><h2 id="reward-form-title" className="text-lg font-extrabold">{editing ? '編輯獎勵' : '新增獎勵'}</h2><label className="block text-sm font-bold">名稱<input required value={form.title} onChange={(event) => setForm((value) => ({ ...value, title: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-normal" /></label><label className="block text-sm font-bold">說明<textarea value={form.description} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-normal" /></label><div className="grid grid-cols-2 gap-3"><label className="text-sm font-bold">星星數<input required type="number" min={1} value={form.cost} onChange={(event) => setForm((value) => ({ ...value, cost: Number(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-normal" /></label><label className="text-sm font-bold">最多兌換次數<input type="number" min={1} value={form.maxRedemptions} onChange={(event) => setForm((value) => ({ ...value, maxRedemptions: event.target.value }))} placeholder="不限" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-normal" /></label></div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.keepAfterRedemption} onChange={(event) => setForm((value) => ({ ...value, keepAfterRedemption: event.target.checked }))} className="h-5 w-5 accent-primary" />兌換後繼續保留此獎勵</label><div className="rounded-xl bg-amber-50 p-4"><h3 className="text-sm font-extrabold text-amber-900">開放日期</h3><label className="mt-2 block text-sm font-bold">規則<select value={form.availabilityMode} onChange={(event) => setForm((value) => ({ ...value, availabilityMode: event.target.value as Reward['availabilityMode'] }))} className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 font-normal">{Object.entries(availabilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{['DATES', 'WEEKENDS_OR_DATES'].includes(form.availabilityMode) && <label className="mt-3 block text-sm font-bold">指定日期<input value={form.availableDates} onChange={(event) => setForm((value) => ({ ...value, availableDates: event.target.value }))} placeholder="2026-09-15, 2026-10-10" className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 font-normal" /><span className="mt-1 block text-xs font-normal text-amber-800">以逗號分隔，格式 YYYY-MM-DD</span></label>}<div className="mt-3 grid grid-cols-2 gap-3"><label className="text-sm font-bold">開始時間<input type="time" value={form.availableStartTime} onChange={(event) => setForm((value) => ({ ...value, availableStartTime: event.target.value }))} className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 font-normal" /></label><label className="text-sm font-bold">結束時間<input type="time" value={form.availableEndTime} onChange={(event) => setForm((value) => ({ ...value, availableEndTime: event.target.value }))} className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 font-normal" /></label></div></div><div className="rounded-xl bg-red-50 p-4"><h3 className="text-sm font-extrabold text-red-900">折扣（選填）</h3><div className="mt-2 grid gap-3 sm:grid-cols-3"><input type="number" min={1} max={99} value={form.discountPercent} onChange={(event) => setForm((value) => ({ ...value, discountPercent: event.target.value }))} placeholder="折扣 %" className="rounded-xl border border-red-200 px-3 py-2" /><input type="datetime-local" value={form.discountStart} onChange={(event) => setForm((value) => ({ ...value, discountStart: event.target.value }))} className="rounded-xl border border-red-200 px-3 py-2" /><input type="datetime-local" value={form.discountEnd} onChange={(event) => setForm((value) => ({ ...value, discountEnd: event.target.value }))} className="rounded-xl border border-red-200 px-3 py-2" /></div></div><div className="flex gap-2"><button type="button" onClick={() => setOpen(false)} className="flex-1 rounded-xl bg-slate-100 py-2 font-bold">取消</button><button disabled={loading} className="flex-1 rounded-xl bg-secondary py-2 font-bold text-white disabled:opacity-50">{loading ? '儲存中...' : '儲存'}</button></div></form></div>}
+
+      {wishOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><form onSubmit={async (event) => { event.preventDefault(); await api.createWish(wishForm.title, wishForm.description); setWishOpen(false); setWishForm({ title: '', description: '' }); qc.invalidateQueries({ queryKey: ['wishes'] }); }} className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6" role="dialog" aria-modal="true" aria-labelledby="wish-title"><h2 id="wish-title" className="text-lg font-extrabold">許下願望</h2><input required value={wishForm.title} onChange={(event) => setWishForm((value) => ({ ...value, title: event.target.value }))} placeholder="我希望..." className="w-full rounded-xl border border-slate-200 px-3 py-2" /><textarea value={wishForm.description} onChange={(event) => setWishForm((value) => ({ ...value, description: event.target.value }))} placeholder="補充說明（選填）" className="w-full rounded-xl border border-slate-200 px-3 py-2" /><div className="flex gap-2"><button type="button" onClick={() => setWishOpen(false)} className="flex-1 rounded-xl bg-slate-100 py-2 font-bold">取消</button><button className="flex-1 rounded-xl bg-primary py-2 font-bold text-white">送出</button></div></form></div>}
     </div>
   );
 }

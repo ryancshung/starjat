@@ -9,8 +9,8 @@ datasource db {
 
 // 使用 String 取代 enum，相容性較好
 // Role: ADMIN | PARENT | CHILD
-// TransactionType: EARN | SPEND | ADJUST
-// TaskStatus / RedemptionStatus: PENDING | APPROVED | REJECTED
+// TransactionType: EARN | SPEND | DEDUCT | REVERSAL | ADJUST
+// TaskStatus / RedemptionStatus: PENDING | APPROVED | REJECTED | CANCELLED
 
 model User {
   id           String   @id @default(cuid())
@@ -28,6 +28,8 @@ model User {
   taskCompletions   TaskCompletion[]
   createdRewards    Reward[]           @relation("RewardCreator")
   redemptions       RewardRedemption[]
+  allowanceRedemptions AllowanceRedemption[]
+  userTrophies      UserTrophy[]
   wishes            Wish[]
 }
 
@@ -36,6 +38,8 @@ model Family {
   name       String
   inviteCode String   @unique
   ownerId    String
+  timezone   String   @default("Asia/Taipei")
+  pointsPerTwd Int?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -45,6 +49,8 @@ model Family {
   rewards Reward[]
   wishes  Wish[]
   scheduledAwards ScheduledAward[]
+  allowanceRedemptions AllowanceRedemption[]
+  trophyDefinitions TrophyDefinition[]
 }
 
 model ScheduledAward {
@@ -56,6 +62,10 @@ model ScheduledAward {
   amount      Int
   frequency   String   // daily | weekly | monthly
   startAt     DateTime @default(now())
+  localTime   String   @default("09:00")
+  weekday     Int?
+  dayOfMonth  Int?
+  nextRunAt   DateTime?
   lastPaidAt  DateTime?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -69,6 +79,8 @@ model FamilyMember {
   familyId String
   userId   String
   joinedAt DateTime @default(now())
+  canDeductPoints Boolean @default(false)
+  monthlyAllowanceLimitTwd Int?
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -83,6 +95,9 @@ model PointTransaction {
   type      String   // EARN | SPEND | ADJUST
   reason    String
   createdBy String?
+  balanceBefore Int?
+  balanceAfter Int?
+  reversalOfId String?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -153,12 +168,26 @@ model Reward {
   discountPercent Int?
   discountStart DateTime?
   discountEnd DateTime?
+  availabilityMode String @default("ALWAYS") // ALWAYS | WEEKENDS | DATES | WEEKENDS_OR_DATES
+  availableStartTime String?
+  availableEndTime String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   family      Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
   createdBy   User               @relation("RewardCreator", fields: [createdById], references: [id])
   redemptions RewardRedemption[]
+  availableDates RewardAvailabilityDate[]
+}
+
+model RewardAvailabilityDate {
+  id       String @id @default(cuid())
+  rewardId String
+  date     String // YYYY-MM-DD in the family's timezone
+
+  reward Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@unique([rewardId, date])
 }
 
 model Wish {
@@ -184,7 +213,68 @@ model RewardRedemption {
   createdAt  DateTime  @default(now())
   reviewedAt DateTime?
   reviewedBy String?
+  reservedPoints Int @default(0)
+  costSnapshot Int?
+  availabilitySnapshot String?
+  cancelledAt DateTime?
 
   reward Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AllowanceRedemption {
+  id                   String   @id @default(cuid())
+  familyId             String
+  userId               String
+  amountTwd            Int
+  pointsPerTwdSnapshot Int
+  reservedPoints       Int
+  status               String   @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELLED
+  createdAt            DateTime @default(now())
+  reviewedAt           DateTime?
+  reviewedBy           String?
+  cancelledAt          DateTime?
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId, status])
+  @@index([userId, createdAt])
+}
+
+model TrophyDefinition {
+  id          String   @id @default(cuid())
+  familyId    String?
+  scope       String   @default("FAMILY") // SYSTEM | FAMILY
+  title       String
+  description String
+  tier        String   // BRONZE | SILVER | GOLD | STELLAR
+  iconKey     String   @default("trophy")
+  isSecret    Boolean  @default(false)
+  triggerType String   // MANUAL | TASK_APPROVED_COUNT | POINTS_EARNED | REWARD_APPROVED_COUNT | WISH_APPROVED_COUNT
+  threshold   Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  family  Family?      @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  unlocks UserTrophy[]
+
+  @@index([scope, familyId, isActive])
+}
+
+model UserTrophy {
+  id         String   @id @default(cuid())
+  trophyId   String
+  userId     String
+  source     String   // AUTOMATIC | MANUAL | RETROACTIVE
+  awardedBy  String?
+  unlockedAt DateTime @default(now())
+
+  trophy TrophyDefinition @relation(fields: [trophyId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([trophyId, userId])
+  @@index([userId, unlockedAt])
 }

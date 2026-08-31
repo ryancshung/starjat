@@ -11,4 +11,5 @@ Thumbs.db
 .vercel
 .railway
 *.log
+*.tsbuildinfo
 .prisma/

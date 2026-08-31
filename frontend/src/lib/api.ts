@@ -75,6 +75,12 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  updateFamilySettings: (data: { timezone?: string; pointsPerTwd?: number | null }) =>
+    request<{ family: Family }>('/api/families/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
+  updateMemberSettings: (userId: string, data: { canDeductPoints?: boolean; monthlyAllowanceLimitTwd?: number | null }) =>
+    request<{ membership: Pick<Family['members'][number], 'canDeductPoints' | 'monthlyAllowanceLimitTwd'> }>(`/api/families/members/${userId}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
+
   removeMember: (userId: string) =>
     request<{ success: boolean }>(`/api/families/members/${userId}`, {
       method: 'DELETE',
@@ -87,14 +93,20 @@ export const api = {
       body: JSON.stringify({ userId, amount, reason }),
     }),
 
+  deductPoints: (userId: string, amount: number, reason: string) =>
+    request('/api/points/deduct', { method: 'POST', body: JSON.stringify({ userId, amount, reason }) }),
+
+  reverseDeduction: (transactionId: string, reason: string) =>
+    request(`/api/points/transactions/${transactionId}/reverse`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
   getPointHistory: (userId?: string) =>
     request<{ transactions: PointTransaction[] }>(
       `/api/points/history${userId ? `?userId=${userId}` : ''}`
     ),
 
-  getBalance: () => request<{ points: number }>('/api/points/balance'),
+  getBalance: () => request<PointBalance>('/api/points/balance'),
   getScheduledAwards: () => request<{ schedules: ScheduledAward[] }>('/api/scheduled-awards'),
-  createScheduledAward: (data: Omit<ScheduledAward, 'id' | 'lastPaidAt' | 'isActive' | 'user'> & { isActive?: boolean }) => request<{ schedule: ScheduledAward }>('/api/scheduled-awards', { method:'POST', body:JSON.stringify(data) }),
+  createScheduledAward: (data: { userId:string; name:string; amount:number; frequency:ScheduledAward['frequency']; startAt?:string; localTime:string; weekday?:number|null; dayOfMonth?:number|null; isActive?:boolean }) => request<{ schedule: ScheduledAward }>('/api/scheduled-awards', { method:'POST', body:JSON.stringify(data) }),
   updateScheduledAward: (id:string, data: Partial<Omit<ScheduledAward, 'id' | 'lastPaidAt' | 'user'>>) => request<{ schedule: ScheduledAward }>(`/api/scheduled-awards/${id}`, { method:'PUT', body:JSON.stringify(data) }),
   deleteScheduledAward: (id:string) => request<{ success:boolean }>(`/api/scheduled-awards/${id}`, { method:'DELETE' }),
 
@@ -154,13 +166,17 @@ export const api = {
     discountPercent?: number | null;
     discountStart?: string | null;
     discountEnd?: string | null;
+    availabilityMode?: Reward['availabilityMode'];
+    availableStartTime?: string | null;
+    availableEndTime?: string | null;
+    availableDates?: string[];
   }) =>
     request<{ reward: Reward }>('/api/rewards', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption' | 'maxRedemptions' | 'discountPercent' | 'discountStart' | 'discountEnd'>>) =>
+  updateReward: (id: string, data: Partial<Pick<Reward, 'title' | 'description' | 'cost' | 'keepAfterRedemption' | 'maxRedemptions' | 'discountPercent' | 'discountStart' | 'discountEnd' | 'availabilityMode' | 'availableStartTime' | 'availableEndTime'>> & { availableDates?: string[] }) =>
     request<{ reward: Reward }>(`/api/rewards/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteReward: (id: string) =>
@@ -174,6 +190,9 @@ export const api = {
   redeemReward: (id: string) =>
     request(`/api/rewards/${id}/redeem`, { method: 'POST' }),
 
+  getMyRedemptions: () => request<{ redemptions: RewardRedemption[] }>('/api/rewards/redemptions/mine'),
+  cancelRedemption: (id: string) => request(`/api/rewards/redemptions/${id}/cancel`, { method: 'POST' }),
+
   reviewRedemption: (id: string, status: 'APPROVED' | 'REJECTED') =>
     request(`/api/rewards/redemptions/${id}`, {
       method: 'PUT',
@@ -182,6 +201,22 @@ export const api = {
 
   getPendingRedemptions: () =>
     request<{ redemptions: RewardRedemption[] }>('/api/rewards/pending'),
+
+  // Allowance
+  getAllowance: () => request<{ requests: AllowanceRedemption[]; settings: AllowanceSettings | null }>('/api/allowance'),
+  requestAllowance: (amountTwd: number) => request<{ request: AllowanceRedemption }>('/api/allowance', { method: 'POST', body: JSON.stringify({ amountTwd }) }),
+  cancelAllowance: (id: string) => request(`/api/allowance/${id}/cancel`, { method: 'POST' }),
+  getPendingAllowance: () => request<{ requests: AllowanceRedemption[] }>('/api/allowance/pending'),
+  reviewAllowance: (id: string, status: 'APPROVED' | 'REJECTED') => request(`/api/allowance/${id}`, { method: 'PUT', body: JSON.stringify({ status }) }),
+
+  // Reports
+  getMonthlyReport: (month: string, userId?: string) => request<MonthlyReport>(`/api/reports/monthly?month=${encodeURIComponent(month)}${userId ? `&userId=${encodeURIComponent(userId)}` : ''}`),
+
+  // Trophies
+  getTrophies: (userId?: string) => request<{ trophies: Trophy[] }>(`/api/trophies${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
+  createTrophy: (data: TrophyInput) => request<{ trophy: Trophy }>('/api/trophies', { method: 'POST', body: JSON.stringify(data) }),
+  updateTrophy: (id: string, data: Partial<TrophyInput>) => request<{ trophy: Trophy }>(`/api/trophies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  awardTrophy: (id: string, userId: string) => request(`/api/trophies/${id}/award`, { method: 'POST', body: JSON.stringify({ userId }) }),
 
   // Admin
   getUsers: () => request<{ users: User[] }>('/api/admin/users'),
@@ -213,8 +248,12 @@ export interface Family {
   name: string;
   inviteCode: string;
   ownerId: string;
+  timezone: string;
+  pointsPerTwd?: number | null;
   members: {
     id: string;
+    canDeductPoints: boolean;
+    monthlyAllowanceLimitTwd?: number | null;
     user: User;
   }[];
 }
@@ -222,11 +261,16 @@ export interface Family {
 export interface PointTransaction {
   id: string;
   amount: number;
-  type: 'EARN' | 'SPEND' | 'ADJUST';
+  type: 'EARN' | 'SPEND' | 'DEDUCT' | 'REVERSAL' | 'ADJUST';
   reason: string;
   createdAt: string;
+  createdBy?: string | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  reversalOfId?: string | null;
 }
-export interface ScheduledAward { id:string; userId:string; name:string; amount:number; frequency:'daily'|'weekly'|'monthly'; startAt:string; lastPaidAt?:string|null; isActive:boolean; user?:{id:string;name:string}; }
+export interface PointBalance { points:number; reservedPoints:number; availablePoints:number; }
+export interface ScheduledAward { id:string; userId:string; name:string; amount:number; frequency:'daily'|'weekly'|'monthly'; startAt:string; localTime:string; weekday?:number|null; dayOfMonth?:number|null; nextRunAt?:string|null; lastPaidAt?:string|null; isActive:boolean; user?:{id:string;name:string}; }
 
 export interface Task {
   id: string;
@@ -260,15 +304,54 @@ export interface Reward {
   discountPercent?: number | null;
   discountStart?: string | null;
   discountEnd?: string | null;
+  availabilityMode: 'ALWAYS' | 'WEEKENDS' | 'DATES' | 'WEEKENDS_OR_DATES';
+  availableStartTime?: string | null;
+  availableEndTime?: string | null;
+  availableDates?: { id?: string; date: string }[];
+  effectiveCost?: number;
+  availability?: { available: boolean; reason?: string | null; nextAvailableAt?: string | null };
 }
 export interface Wish { id:string; title:string; description?:string; status:'PENDING'|'APPROVED'|'REJECTED'; user:{id:string;name:string}; }
 
 export interface RewardRedemption {
   id: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   createdAt: string;
+  reservedPoints: number;
+  costSnapshot?: number | null;
   reward: Reward;
   user: { id: string; name: string; points: number };
+}
+
+export interface AllowanceSettings { pointsPerTwd?: number | null; monthlyAllowanceLimitTwd?: number | null; timezone: string; }
+export interface AllowanceRedemption {
+  id: string; amountTwd: number; pointsPerTwdSnapshot: number; reservedPoints: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'; createdAt: string;
+  user?: { id: string; name: string; points: number };
+}
+
+export interface TrophyInput {
+  title: string; description: string; tier: 'BRONZE' | 'SILVER' | 'GOLD' | 'STELLAR';
+  iconKey: string; isSecret: boolean;
+  triggerType: 'MANUAL' | 'TASK_APPROVED_COUNT' | 'POINTS_EARNED' | 'REWARD_APPROVED_COUNT' | 'WISH_APPROVED_COUNT';
+  threshold: number; isActive?: boolean;
+}
+export interface Trophy extends TrophyInput {
+  id: string; scope: 'SYSTEM' | 'FAMILY'; familyId?: string | null; progress: number; unlocked: boolean;
+  unlock?: { source: 'AUTOMATIC' | 'MANUAL' | 'RETROACTIVE'; unlockedAt: string } | null;
+}
+
+export interface MonthlyChildReport {
+  user: { id: string; name: string };
+  summary: { openingPoints:number; earned:number; rewardSpent:number; allowanceSpent:number; deducted:number; reversed:number; closingPoints:number };
+  taskSummary: { approvedCount:number; rejectedCount:number; totalPoints:number; topTasks:string[] };
+  allowanceTwd:number; trophies:Array<{ id:string; trophy:Trophy; unlockedAt:string }>;
+  transactions: PointTransaction[];
+}
+export interface MonthlyReport {
+  month:string; timezone:string; family:{id:string;name:string};
+  familySummary:{earned:number;spent:number;deducted:number;tasks:number;allowanceTwd:number;trophies:number};
+  children:MonthlyChildReport[];
 }
 
 export interface TaskGroup { id: string; name: string; sortOrder: number; }

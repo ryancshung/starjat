@@ -9,6 +9,7 @@
     "worker:dev": "wrangler dev src/worker.ts",
     "worker:deploy": "prisma generate && wrangler deploy",
     "worker:typecheck": "prisma generate && tsc --noEmit -p tsconfig.worker.json",
+    "test": "tsx --test tests/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio"

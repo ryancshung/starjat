@@ -7,5 +7,5 @@
   "observability": {
     "enabled": true
   },
-  "triggers": { "crons": ["0 0 * * *"] }
+  "triggers": { "crons": ["*/15 * * * *"] }
 }

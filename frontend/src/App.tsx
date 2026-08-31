@@ -12,6 +12,8 @@ import History from './pages/History';
 import Admin from './pages/Admin';
 import ScheduledAwards from './pages/ScheduledAwards';
 import UserGuide from './pages/UserGuide';
+import MonthlyReport from './pages/MonthlyReport';
+import Trophies from './pages/Trophies';
 import Layout from './components/Layout';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -57,6 +59,8 @@ export default function App() {
         <Route path="family" element={<FamilyPage />} />
         <Route path="history" element={<History />} />
         <Route path="scheduled-awards" element={<ScheduledAwards />} />
+        <Route path="reports" element={<MonthlyReport />} />
+        <Route path="trophies" element={<Trophies />} />
         <Route path="guide" element={<UserGuide />} />
         <Route path="admin" element={<Admin />} />
       </Route>
