@@ -14,14 +14,14 @@ async function main(){
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.goto('https://starjat.vercel.app/app/tasks');
       await page.getByRole('heading',{name:'每日挑戰',exact:true}).waitFor();
-      await page.getByText('Smoke daily combo',{exact:false}).first().waitFor();
+      await page.getByRole('heading',{name:/Smoke daily combo/}).first().waitFor();
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       await page.screenshot({path:path.join(__dirname,`../../backend/.release/live-tasks-${role}.png`),fullPage:true});
       await page.getByRole('navigation',{name:'手機主要導覽'}).getByRole('link',{name:'更多'}).click();
       await page.getByRole('navigation',{name:'更多功能'}).getByRole('link',{name:'月報',exact:true}).click();
       await page.getByText('Smoke custom reward',{exact:false}).waitFor();
-      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       await page.screenshot({path:path.join(__dirname,`../../backend/.release/live-report-${role}.png`),fullPage:true});
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       assert.deepEqual(errors,[]);await context.close();
       console.log(`${role}: live mobile tasks, More, monthly report, no horizontal overflow or JS errors`);
     }

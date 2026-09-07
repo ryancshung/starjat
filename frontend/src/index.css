@@ -12,6 +12,7 @@ body {
 }
 
 .safe-area-pb { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.monthly-report { overflow-wrap: anywhere; }
 
 :focus-visible {
   outline: 3px solid #2563eb;

@@ -1,7 +1,7 @@
 import { test,expect,Page } from '@playwright/test';
 const task={id:'a',title:'閱讀 20 分鐘',description:'讀完今天的故事',points:5,isRecurring:true,recurringType:'daily',keepAfterCompletion:true,maxCompletions:null,completions:[],myStatus:'READY'};
 const award={id:'award',challengeId:'challenge',userId:'child',user:{id:'child',name:'小星'},localDate:'2026-09-07',title:'每日閱讀',bonusStars:0,customTitle:'玩電動 30 分鐘',customDescription:'晚餐後一起玩',earnedAt:'2026-09-07T04:00:00Z',fulfilledAt:null};
-async function mock(page:Page,role='CHILD',options:{lost?:boolean}={}) {
+async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boolean}={}) {
   let status='READY',submits=0,fulfills=0,fulfilled=false;
   const saved:any[]=[];
   await page.addInitScript(()=>localStorage.setItem('token','test-token'));
@@ -24,6 +24,11 @@ async function mock(page:Page,role='CHILD',options:{lost?:boolean}={}) {
     else if(path.includes('/rewards'))json={rewards:[],redemptions:[],wishes:[]};
     else if(path.includes('/balance'))json={availablePoints:10};
     else json={wishes:[],redemptions:[],groups:[]};
+    if(options.longNames){
+      const name='release-smoke-72ad5b9e-a2f3-4361-a169-6af9bd307224-CHILD';
+      if(path==='/api/reports/monthly')json.children[0].user.name=name;
+      if(path==='/api/families/me')json.family.members[0].user.name=name;
+    }
     await route.fulfill({json});
   });
   return {submits:()=>submits,fulfills:()=>fulfills,saved};
@@ -79,4 +84,11 @@ test('large text and unavailable session storage still permit a single submissio
   await page.goto('/app/tasks');await page.evaluate(()=>document.documentElement.style.fontSize='200%');
   await page.getByRole('button',{name:'完成',exact:true}).click();await expect(page.getByRole('button',{name:'等待家長審核'})).toBeDisabled();
   expect(state.submits()).toBe(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('parent report with long child name stays within mobile viewport',async({page})=>{
+  await page.setViewportSize({width:360,height:800});await mock(page,'PARENT',{longNames:true});
+  await page.goto('/app/reports');await expect(page.getByText('release-smoke-', {exact:false}).first()).toBeAttached();
+  await expect(page.getByText('玩電動 30 分鐘',{exact:false})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
