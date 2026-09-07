@@ -11,6 +11,8 @@ body {
   min-height: 100vh;
 }
 
+.safe-area-pb { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
 :focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 2px;

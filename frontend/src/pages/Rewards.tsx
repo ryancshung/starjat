@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChallengeAwards } from '../components/DailyChallenges';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Gift, LockKeyhole, RotateCcw, Tag } from 'lucide-react';
 import { api, Reward } from '../lib/api';
@@ -43,6 +44,7 @@ export default function Rewards() {
   return (
     <div className="space-y-7">
       <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-extrabold text-slate-800">獎勵商店</h1><p className="mt-1 text-sm text-slate-500">{isParent ? '建立獎勵與開放日期' : `可用 ⭐ ${balance?.availablePoints ?? 0} · 保留 ⭐ ${balance?.reservedPoints ?? 0}`}</p></div><div className="flex gap-2">{isParent ? <button type="button" onClick={() => openEditor()} className="rounded-xl bg-secondary px-4 py-2 text-sm font-bold text-white">新增獎勵</button> : <button type="button" onClick={() => setWishOpen(true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">許下願望</button>}</div></header>
+      <ChallengeAwards />
 
       {isLoading ? <p role="status" className="text-slate-500">載入中...</p> : !data?.rewards.length ? <div className="rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500"><Gift className="mx-auto mb-2" />目前沒有獎勵</div> : <div className="grid gap-4 sm:grid-cols-2">{data.rewards.map((reward) => {
         const available = reward.availability?.available !== false;

@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
+import { monthlyChallengeSummary } from '../lib/challenge-report';
 import { localParts, monthBounds } from '../lib/family-time';
 import { createPrisma } from '../lib/worker-prisma';
 import { authenticate, type WorkerRouteEnv } from './shared';
 
+export function createReportRoutes(getDb = createPrisma) {
 const reports = new Hono<WorkerRouteEnv>();
 
 function summarize(transactions: any[], openingPoints: number) {
@@ -16,7 +18,7 @@ function summarize(transactions: any[], openingPoints: number) {
 }
 
 reports.get('/monthly', authenticate, async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const actor = c.get('user');
     const mine = await db.familyMember.findFirst({ where: { userId: actor.userId }, include: { family: { include: { members: { include: { user: true } } } } } });
@@ -42,9 +44,10 @@ reports.get('/monthly', authenticate, async (c) => {
         db.allowanceRedemption.findMany({ where: { userId, status: 'APPROVED', reviewedAt: { gte: bounds.start, lt: bounds.end } }, orderBy: { reviewedAt: 'asc' } }),
       ]);
       childReports.push({
+        challengeSummary: await monthlyChallengeSummary(db,userId,bounds.start,bounds.end),
         user: { id: member.user.id, name: member.user.name },
         summary: summarize(transactions, before._sum.amount ?? 0),
-        taskSummary: { approvedCount: approvedTasks.length, rejectedCount: rejectedTasks, totalPoints: approvedTasks.reduce((sum: number, item: any) => sum + item.task.points, 0), topTasks: [...new Set(approvedTasks.map((item: any) => item.task.title))].slice(0, 5) },
+        taskSummary: { approvedCount: approvedTasks.length, rejectedCount: rejectedTasks, totalPoints: approvedTasks.reduce((sum: number, item: any) => sum + (item.pointsSnapshot ?? item.task.points), 0), topTasks: [...new Set(approvedTasks.map((item: any) => item.titleSnapshot ?? item.task.title))].slice(0, 5) },
         allowanceTwd: allowance.reduce((sum: number, item: any) => sum + item.amountTwd, 0),
         trophies,
         transactions: actor.role === 'CHILD' ? transactions.filter((tx: any) => tx.type !== 'ADJUST') : transactions,
@@ -55,4 +58,6 @@ reports.get('/monthly', authenticate, async (c) => {
   } finally { await db.$disconnect(); }
 });
 
-export default reports;
+return reports;
+}
+export default createReportRoutes();

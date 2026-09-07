@@ -15,6 +15,7 @@ import UserGuide from './pages/UserGuide';
 import MonthlyReport from './pages/MonthlyReport';
 import Trophies from './pages/Trophies';
 import Layout from './components/Layout';
+import More from './pages/More';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -55,6 +56,7 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="tasks" element={<Tasks />} />
+        <Route path="more" element={<More />} />
         <Route path="rewards" element={<Rewards />} />
         <Route path="family" element={<FamilyPage />} />
         <Route path="history" element={<History />} />

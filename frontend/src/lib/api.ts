@@ -20,9 +20,13 @@ async function request<T>(
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 20000);
+  try {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers,
+    signal: options.signal ?? controller.signal,
   });
 
   const data = await res.json().catch(() => ({}));
@@ -30,6 +34,7 @@ async function request<T>(
     throw new Error(data.error || `請求失敗 (${res.status})`);
   }
   return data as T;
+  } finally { window.clearTimeout(timer); }
 }
 
 export const api = {
@@ -111,7 +116,10 @@ export const api = {
   deleteScheduledAward: (id:string) => request<{ success:boolean }>(`/api/scheduled-awards/${id}`, { method:'DELETE' }),
 
   // Tasks
-  getTasks: () => request<{ tasks: Task[] }>('/api/tasks'),
+  getTasks: () => request<{ tasks: Task[]; localDate: string }>('/api/tasks'),
+  getChallenges: () => request<ChallengeData>('/api/tasks/challenges'),
+  saveChallenge: (data: ChallengeInput, id?: string) => request(`/api/tasks/challenges${id ? `/${id}` : ''}`, { method:id?'PUT':'POST', body:JSON.stringify(data) }),
+  fulfillChallengeAward: (id: string) => request(`/api/tasks/challenge-awards/${id}/fulfill`, { method:'PUT', body:'{}' }),
 
   createTask: (data: {
     title: string;
@@ -139,10 +147,10 @@ export const api = {
   updateTaskGroup: (id: string, name: string) => request<{ group: TaskGroup }>(`/api/tasks/groups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   deleteTaskGroup: (id: string) => request<{ success: boolean }>(`/api/tasks/groups/${id}`, { method: 'DELETE' }),
 
-  completeTask: (id: string, note?: string) =>
-    request(`/api/tasks/${id}/complete`, {
+  completeTask: (id: string, note?: string, requestId?: string) =>
+    request<{ completion: TaskCompletion }>(`/api/tasks/${id}/complete`, {
       method: 'POST',
-      body: JSON.stringify({ note }),
+      body: JSON.stringify({ note, requestId }),
     }),
 
   reviewTaskCompletion: (id: string, status: 'APPROVED' | 'REJECTED') =>
@@ -273,6 +281,8 @@ export interface PointBalance { points:number; reservedPoints:number; availableP
 export interface ScheduledAward { id:string; userId:string; name:string; amount:number; frequency:'daily'|'weekly'|'monthly'; startAt:string; localTime:string; weekday?:number|null; dayOfMonth?:number|null; nextRunAt?:string|null; lastPaidAt?:string|null; isActive:boolean; user?:{id:string;name:string}; }
 
 export interface Task {
+  myStatus?: 'READY' | 'PENDING' | 'APPROVED';
+  nextConfig?: Task;
   id: string;
   title: string;
   description?: string;
@@ -290,6 +300,9 @@ export interface TaskCompletion {
   id: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   completedAt: string;
+  localDate?: string | null;
+  pointsSnapshot?: number | null;
+  titleSnapshot?: string | null;
   task: Task;
   user: { id: string; name: string };
 }
@@ -345,6 +358,7 @@ export interface MonthlyChildReport {
   user: { id: string; name: string };
   summary: { openingPoints:number; earned:number; rewardSpent:number; allowanceSpent:number; deducted:number; reversed:number; closingPoints:number };
   taskSummary: { approvedCount:number; rejectedCount:number; totalPoints:number; topTasks:string[] };
+  challengeSummary: { bonusStars:number; awards:ChallengeAward[] };
   allowanceTwd:number; trophies:Array<{ id:string; trophy:Trophy; unlockedAt:string }>;
   transactions: PointTransaction[];
 }
@@ -355,3 +369,19 @@ export interface MonthlyReport {
 }
 
 export interface TaskGroup { id: string; name: string; sortOrder: number; }
+
+export interface ChallengeInput {
+  title:string; taskIds:string[]; childIds:string[]; bonusStars:number;
+  customTitle?:string|null; customDescription?:string|null; isActive:boolean;
+}
+export interface ChallengeAward {
+  id:string; challengeId:string; userId:string; localDate:string; title:string;
+  bonusStars:number; customTitle:string|null; customDescription:string|null;
+  earnedAt:string; fulfilledAt:string|null; user?:{id:string;name:string};
+}
+export interface ChallengeData {
+  localDate:string; children:{id:string;name:string}[];
+  settings:(ChallengeInput & {id:string;effectiveDate:string})[];
+  progress:(ChallengeInput & {id:string;localDate:string;user:{id:string;name:string};tasks:{id:string;title:string;status:'READY'|'PENDING'|'APPROVED'}[];award:ChallengeAward|null})[];
+  awards:ChallengeAward[];
+}

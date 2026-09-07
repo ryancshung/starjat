@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { monthlyChallengeSummary } from '../lib/challenge-report';
 import { prisma } from '../lib/prisma';
 import { localParts, monthBounds } from '../lib/family-time';
 import { authenticate, type AuthRequest } from '../middleware/auth';
@@ -36,7 +37,7 @@ router.get('/monthly', authenticate, async (req: AuthRequest, res: Response) => 
       prisma.userTrophy.findMany({ where: { userId, unlockedAt: { gte: bounds.start, lt: bounds.end } }, include: { trophy: true } }),
       prisma.allowanceRedemption.findMany({ where: { userId, status: 'APPROVED', reviewedAt: { gte: bounds.start, lt: bounds.end } } }),
     ]);
-    childReports.push({ user: { id: member.user.id, name: member.user.name }, summary: summarize(transactions, before._sum.amount ?? 0), taskSummary: { approvedCount: approvedTasks.length, rejectedCount: rejectedTasks, totalPoints: approvedTasks.reduce((sum, item) => sum + item.task.points, 0), topTasks: [...new Set(approvedTasks.map((item) => item.task.title))].slice(0, 5) }, allowanceTwd: allowance.reduce((sum, item) => sum + item.amountTwd, 0), trophies, transactions: req.user!.role === 'CHILD' ? transactions.filter((tx) => tx.type !== 'ADJUST') : transactions });
+    childReports.push({ challengeSummary: await monthlyChallengeSummary(prisma,userId,bounds.start,bounds.end), user: { id: member.user.id, name: member.user.name }, summary: summarize(transactions, before._sum.amount ?? 0), taskSummary: { approvedCount: approvedTasks.length, rejectedCount: rejectedTasks, totalPoints: approvedTasks.reduce((sum, item) => sum + (item.pointsSnapshot ?? item.task.points), 0), topTasks: [...new Set(approvedTasks.map((item) => item.titleSnapshot ?? item.task.title))].slice(0, 5) }, allowanceTwd: allowance.reduce((sum, item) => sum + item.amountTwd, 0), trophies, transactions: req.user!.role === 'CHILD' ? transactions.filter((tx) => tx.type !== 'ADJUST') : transactions });
   }
   const familySummary = childReports.reduce((sum, report) => ({ earned: sum.earned + report.summary.earned, spent: sum.spent + report.summary.rewardSpent + report.summary.allowanceSpent, deducted: sum.deducted + report.summary.deducted, tasks: sum.tasks + report.taskSummary.approvedCount, allowanceTwd: sum.allowanceTwd + report.allowanceTwd, trophies: sum.trophies + report.trophies.length }), { earned: 0, spent: 0, deducted: 0, tasks: 0, allowanceTwd: 0, trophies: 0 });
   res.json({ month, timezone: mine.family.timezone, family: { id: mine.family.id, name: mine.family.name }, familySummary, children: childReports });

@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import DailyChallenges from '../components/DailyChallenges';
+import { taskRequestId, clearTaskRequestId } from '../lib/task-request-key';
 import { api, Task } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -8,9 +10,10 @@ export default function Tasks() {
   const qc = useQueryClient();
   const isParent = user?.role === 'PARENT' || user?.role === 'ADMIN';
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['tasks'],
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['tasks', user?.id],
     queryFn: api.getTasks,
+    refetchInterval: 30000,
   });
 
   const [open, setOpen] = useState(false);
@@ -26,11 +29,14 @@ export default function Tasks() {
     groupId: '',
   });
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(new Set<string>());
+  const [busyTasks, setBusyTasks] = useState<Set<string>>(new Set());
+  const [taskMessages, setTaskMessages] = useState<Record<string,string>>({});
   const [sorting, setSorting] = useState(false);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState('all');
-  const { data: groupsData } = useQuery({ queryKey: ['taskGroups'], queryFn: api.getTaskGroups, enabled: isParent });
+  const { data: groupsData } = useQuery({ queryKey: ['taskGroups',user?.id], queryFn: api.getTaskGroups });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,16 +74,35 @@ export default function Tasks() {
   };
 
   const handleComplete = async (id: string) => {
+    if (submitting.current.has(id)) return;
+    submitting.current.add(id); setBusyTasks(new Set(submitting.current));
+    setTaskMessages(m=>({...m,[id]:'送出中，請稍候…'}));
+    const key=`task-request:${user?.id}:${id}:${data?.localDate}`;
     try {
-      await api.completeTask(id);
-      alert('已提交，等待家長審核！');
-      qc.invalidateQueries({ queryKey: ['tasks'] });
+      const requestId=taskRequestId(key);
+      const {completion}=await api.completeTask(id,undefined,requestId);
+      clearTaskRequestId(key);
+      qc.setQueryData(['tasks',user?.id],(old:typeof data)=>old?({...old,tasks:old.tasks.map(t=>t.id===id?({...t,myStatus:completion.status==='APPROVED'?'APPROVED':completion.status==='PENDING'?'PENDING':'READY'}):t)}):old);
+      setTaskMessages(m=>({...m,[id]:completion.status==='REJECTED'?'先前申請已退回，請重新提交。':completion.status==='APPROVED'?'今日已完成！':'已送出，等待家長審核。'}));
+      await qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['challenges'] });
     } catch (err) {
-      alert(err instanceof Error ? err.message : '提交失敗');
+      try {
+        const refreshed=await api.getTasks();
+        qc.setQueryData(['tasks',user?.id],refreshed);
+        const status=refreshed.tasks.find(t=>t.id===id)?.myStatus;
+        if(status==='PENDING'||status==='APPROVED'){
+          clearTaskRequestId(key);
+          setTaskMessages(m=>({...m,[id]:status==='PENDING'?'已確認送出，等待家長審核。':'今日已完成。'}));
+        } else setTaskMessages(m=>({...m,[id]:`${err instanceof Error?err.message:'未能送出'}；可按完成安全重試。`}));
+      } catch {setTaskMessages(m=>({...m,[id]:'目前無法確認送出結果。網路恢復後可按完成安全重試，不會重複領星。'}));}
+    } finally {
+      submitting.current.delete(id);setBusyTasks(new Set(submitting.current));
     }
   };
 
   const startEdit = (task: Task) => {
+    task = task.nextConfig ?? task;
     setEditing(task);
     setForm({ title: task.title, description: task.description ?? '', points: task.points, isRecurring: task.isRecurring, recurringType: task.recurringType === 'weekly' ? 'weekly' : 'daily', keepAfterCompletion: task.keepAfterCompletion, maxCompletions: task.maxCompletions?.toString() ?? '', groupId: task.groupId ?? '' });
     setOpen(true);
@@ -112,10 +137,12 @@ export default function Tasks() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold text-slate-800">任務</h1>
+      <h1 className="text-2xl font-extrabold text-slate-800">任務</h1>
+      <DailyChallenges tasks={data?.tasks ?? []} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-extrabold text-slate-800">任務清單</h2>
         {isParent && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={async () => { const name=prompt('新增任務群組名稱'); if (!name?.trim()) return; try { await api.createTaskGroup(name.trim()); qc.invalidateQueries({queryKey:['taskGroups']}); } catch { alert('建立群組失敗，名稱可能重複'); } }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">+ 群組</button>
             {sorting ? <><button onClick={() => { setSorting(false); setDraftOrder([]); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">取消排序</button><button onClick={saveOrder} className="px-3 py-2 bg-primary text-white font-bold rounded-xl text-sm">儲存排序</button></> : <button onClick={() => { setDraftOrder((data?.tasks ?? []).map((task) => task.id)); setSorting(true); }} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">排序</button>}
             <button onClick={() => window.print()} className="px-3 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm print:hidden">列印</button>
@@ -124,7 +151,7 @@ export default function Tasks() {
         )}
       </div>
 
-      {isLoading ? (
+      {error ? <p role="alert">任務載入失敗，請重新整理。</p> : isLoading ? (
         <p className="text-slate-400">載入中...</p>
       ) : !data?.tasks?.length ? (
         <p className="text-slate-400">目前沒有任務</p>
@@ -137,8 +164,8 @@ export default function Tasks() {
         </div>
         <div className="space-y-3 print:grid print:grid-cols-2 print:gap-3 print:space-y-0">
           {tasks.map((task, index) => (
-            <div key={task.id} draggable={isParent} onDragStart={()=>setDraggingId(task.id)} onDragOver={(e)=>e.preventDefault()} onDrop={()=>dropTask(task.id)} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center justify-between gap-4 print:break-inside-avoid print:border-slate-300">
-              <div>
+            <div key={task.id} draggable={isParent} onDragStart={()=>setDraggingId(task.id)} onDragOver={(e)=>e.preventDefault()} onDrop={()=>dropTask(task.id)} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-wrap items-center justify-between gap-4 print:break-inside-avoid print:border-slate-300">
+              <div className="min-w-0 max-w-full break-words">
                 <div className="font-bold text-slate-800">{task.title}</div>
                 {task.group && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{task.group.name}</span>}
                 {task.description && (
@@ -164,11 +191,14 @@ export default function Tasks() {
               ) : (
                 <button
                   onClick={() => handleComplete(task.id)}
-                  className="px-4 py-2 bg-secondary text-white font-bold rounded-xl text-sm shrink-0"
+                  disabled={busyTasks.has(task.id)||task.myStatus==='PENDING'||task.myStatus==='APPROVED'}
+                  aria-busy={busyTasks.has(task.id)}
+                  className="min-h-11 px-4 py-2 bg-emerald-700 text-white font-bold rounded-xl text-sm shrink-0 disabled:bg-slate-200 disabled:text-slate-600"
                 >
-                  完成
+                  {busyTasks.has(task.id)?'送出中…':task.myStatus==='PENDING'?'等待家長審核':task.myStatus==='APPROVED'?'今日已完成':'完成'}
                 </button>
               )}
+              {taskMessages[task.id]&&<p role="status" className="w-full text-sm text-slate-600">{taskMessages[task.id]}</p>}
             </div>
           ))}
         </div>
@@ -179,9 +209,10 @@ export default function Tasks() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleCreate}
-            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
+            className="bg-white rounded-2xl p-6 w-full max-w-sm max-h-[85dvh] overflow-y-auto space-y-4"
           >
             <h3 className="font-extrabold text-lg">{editing ? '編輯任務' : '新增任務'}</h3>
+            {editing && (editing.isRecurring || form.isRecurring) && <p className="text-sm text-slate-600">每日任務的修改於家庭時區翌日生效，今日獎勵不受影響。</p>}
             <input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
@@ -207,7 +238,7 @@ export default function Tasks() {
               </label>
               <input
                 type="number"
-                min={1}
+                min={0}
                 value={form.points}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, points: Number(e.target.value) }))

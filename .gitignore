@@ -13,3 +13,6 @@ Thumbs.db
 *.log
 *.tsbuildinfo
 .prisma/
+frontend/test-results/
+frontend/playwright-report/
+backend/.release/

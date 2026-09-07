@@ -30,8 +30,18 @@ app.use('/api/*', async (c, next) => {
   })(c, next);
 });
 
+// Release switch: block the new schema-dependent endpoints until migration is verified.
+app.use('/api/*', async (c,next) => {
+  const path=new URL(c.req.url).pathname;
+  if(c.env.TASKS_MAINTENANCE==='1' && (/^\/api\/(tasks|reports)(\/|$)/).test(path)) {
+    c.header('Retry-After','30');
+    return c.json({error:'任務功能正在更新，請稍後重新整理。'},503);
+  }
+  await next();
+});
+
 app.get('/api/health', (c) =>
-  c.json({ status: 'ok', name: 'StarJar API', runtime: 'cloudflare-workers' })
+  c.json({ status: 'ok', name: 'StarJar API', runtime: 'cloudflare-workers', release:'2026-09-07-daily-challenges', tasksMaintenance:c.env.TASKS_MAINTENANCE==='1' })
 );
 
 app.route('/api/auth', authRoutes);

@@ -258,7 +258,7 @@ export default function Dashboard() {
                   <span className="font-semibold">{c.user.name}</span>
                   <span className="text-slate-500 text-sm">
                     {' '}
-                    完成了「{c.task.title}」(+{c.task.points})
+                    完成了「{c.titleSnapshot ?? c.task.title}」(+{c.pointsSnapshot ?? c.task.points}){c.localDate && ` · ${c.localDate}`}
                   </span>
                 </div>
                 <div className="flex gap-2 shrink-0">

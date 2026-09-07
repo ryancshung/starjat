@@ -6,6 +6,7 @@ export interface WorkerEnv {
   JWT_SECRET: string;
   JWT_EXPIRES_IN?: string;
   CORS_ORIGIN?: string;
+  TASKS_MAINTENANCE?: string;
 }
 
 /**

@@ -148,6 +148,15 @@ VITE_API_URL=http://localhost:3001
 
 ## 資料庫 Schema 重點
 
+### 2026-09-07 每日挑戰
+
+- 任務可為 0 星；每日任務每位孩子每天只領一次，退回可重送。
+- 每日挑戰支援星星、自訂獎勵或兩者；全數核准後自動發放，自訂獎勵由家長標記兌現。
+- 挑戰與每日任務修改翌日生效，提交日期依家庭時區保存；跨日審核保留原獎勵。
+- 手機使用「更多 → 月報」，家長看家庭／孩子，孩子只看自己。
+- 新 API：`GET/POST /api/tasks/challenges`、`PUT /api/tasks/challenges/:id`、`PUT /api/tasks/challenge-awards/:id/fulfill`。
+- 遷移、相容性與測試詳見 [每日挑戰交付說明](docs/2026-09-07-daily-challenges.md)。正式資料庫及 Worker 已於 2026-09-07 更新，前端由 main 分支發布至 Vercel。
+
 - `User`：角色（ADMIN / PARENT / CHILD）、積分餘額
 - `Family`：家庭、邀請碼、時區與零用錢比例
 - `FamilyMember`：成員、扣星權限與孩子零用錢上限

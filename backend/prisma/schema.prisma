@@ -149,9 +149,91 @@ model TaskCompletion {
   completedAt DateTime  @default(now())
   reviewedAt  DateTime?
   reviewedBy  String?
+  requestId   String?
+  localDate   String?
+  pointsSnapshot Int?
+  titleSnapshot String?
+  // Non-null only while pending, or approved for a daily task.
+  activeKey   String? @unique
+  requests TaskSubmissionRequest[]
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+  @@index([userId, localDate, status])
+}
+
+// Scalar IDs intentionally preserve historical snapshots when source settings change.
+model DailyTaskVersion {
+  id String @id @default(cuid())
+  taskId String
+  familyId String
+  effectiveDate String
+  config Json
+  @@unique([taskId, effectiveDate])
+  @@index([familyId, effectiveDate])
+}
+
+model DailyChallenge {
+  id String @id @default(cuid())
+  familyId String
+  createdAt DateTime @default(now())
+  versions DailyChallengeVersion[]
+  @@index([familyId])
+}
+
+model DailyChallengeVersion {
+  id String @id @default(cuid())
+  challengeId String
+  effectiveDate String
+  title String
+  taskIds Json
+  childIds Json
+  bonusStars Int
+  customTitle String?
+  customDescription String?
+  isActive Boolean @default(true)
+  challenge DailyChallenge @relation(fields: [challengeId], references: [id])
+  @@unique([challengeId, effectiveDate])
+}
+
+model TaskDaySnapshot {
+  id String @id @default(cuid())
+  familyId String
+  userId String
+  localDate String
+  tasks Json
+  challenges Json
+  createdAt DateTime @default(now())
+  @@unique([familyId, userId, localDate])
+  @@index([familyId, localDate])
+}
+
+model TaskSubmissionRequest {
+  id String @id @default(cuid())
+  userId String
+  requestId String
+  completionId String
+  completion TaskCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
+  @@unique([userId, requestId])
+}
+
+model ChallengeAward {
+  id String @id @default(cuid())
+  familyId String
+  challengeId String
+  userId String
+  localDate String
+  title String
+  bonusStars Int
+  customTitle String?
+  customDescription String?
+  earnedAt DateTime @default(now())
+  fulfilledAt DateTime?
+  fulfilledBy String?
+  @@unique([challengeId, userId, localDate])
+  @@index([familyId, userId, earnedAt])
 }
 
 model Reward {

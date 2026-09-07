@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import {
   Home,
@@ -12,11 +12,13 @@ import {
   ChartNoAxesColumnIncreasing,
   CircleHelp,
   LogOut,
+  Menu,
 } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const isParent = user?.role === 'PARENT' || user?.role === 'ADMIN';
   const isAdmin = user?.role === 'ADMIN';
 
@@ -73,7 +75,7 @@ export default function Layout() {
 
         {/* Desktop nav - 放在 header 內，跟著文件流，不會蓋住內容 */}
         <nav className="hidden md:block border-t border-slate-100">
-          <div className="max-w-5xl mx-auto px-4 flex gap-1">
+          <div className="max-w-5xl mx-auto px-4 flex flex-wrap gap-1">
             {nav.map(({ to, icon: Icon, label, end }) => (
               <NavLink
                 key={to}
@@ -101,16 +103,16 @@ export default function Layout() {
       </main>
 
       {/* Bottom nav (mobile only) */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20 safe-area-pb">
-        <div className="flex justify-start overflow-x-auto py-2">
-          {nav.map(({ to, icon: Icon, label, end }) => (
+      <nav aria-label="手機主要導覽" className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20 safe-area-pb print:hidden">
+        <div className="grid grid-cols-4 py-2">
+          {[...nav.slice(0,3), {to:'/app/more',icon:Menu,label:'更多',end:false}].map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex min-w-[4.5rem] flex-col items-center gap-0.5 px-2 py-1 text-xs ${
-                  isActive ? 'text-primary font-bold' : 'text-slate-500'
+                `flex min-h-11 flex-col items-center justify-center gap-0.5 px-2 py-1 text-xs ${
+                  isActive || (to === '/app/more' && !['/app','/app/tasks','/app/rewards'].includes(location.pathname)) ? 'text-primary font-bold' : 'text-slate-500'
                 }`
               }
             >
