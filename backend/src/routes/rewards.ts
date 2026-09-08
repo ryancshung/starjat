@@ -76,9 +76,23 @@ router.put('/wishes/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (
   res.json({ wish: updated });
 });
 
+router.delete('/wishes/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  const mine = await membership(req.user!.userId);
+  const wish = await prisma.wish.findFirst({ where: { id: req.params.id, familyId: mine?.familyId } });
+  if (!wish) return void res.status(404).json({ error: '找不到願望' });
+  if (wish.status !== 'REJECTED') return void res.status(409).json({ error: '只能刪除未核准的願望' });
+  await prisma.wish.delete({ where: { id: wish.id } });
+  res.json({ success: true });
+});
+
 router.get('/pending', authenticate, requireRoles('PARENT', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   const mine = await membership(req.user!.userId);
-  res.json({ redemptions: mine ? await prisma.rewardRedemption.findMany({ where: { status: 'PENDING', reward: { familyId: mine.familyId } }, include: { reward: true, user: { select: { id: true, name: true, points: true } } }, orderBy: { createdAt: 'desc' } }) : [] });
+  const include = { reward: true, user: { select: { id: true, name: true, points: true } } } as const;
+  const [redemptions, rejectedRedemptions] = mine ? await Promise.all([
+    prisma.rewardRedemption.findMany({ where: { status: 'PENDING', reward: { familyId: mine.familyId } }, include, orderBy: { createdAt: 'desc' } }),
+    prisma.rewardRedemption.findMany({ where: { status: 'REJECTED', reward: { familyId: mine.familyId } }, include, orderBy: { reviewedAt: 'desc' }, take: 100 }),
+  ]) : [[], []];
+  res.json({ redemptions, rejectedRedemptions });
 });
 
 router.post('/redemptions/:id/cancel', authenticate, requireRoles('CHILD'), async (req: AuthRequest, res: Response) => {
@@ -116,6 +130,15 @@ router.put('/redemptions/:id', authenticate, requireRoles('PARENT', 'ADMIN'), as
     if (error instanceof Error && error.message === 'LIMIT') return void res.status(400).json({ error: '此獎勵已達兌換次數上限' });
     throw error;
   }
+});
+
+router.delete('/redemptions/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  const mine = await membership(req.user!.userId);
+  const row = await prisma.rewardRedemption.findUnique({ where: { id: req.params.id }, include: { reward: true } });
+  if (!mine || !row || row.reward.familyId !== mine.familyId) return void res.status(404).json({ error: '找不到獎勵申請' });
+  if (row.status !== 'REJECTED') return void res.status(409).json({ error: '只能刪除未核准的獎勵申請' });
+  await prisma.rewardRedemption.delete({ where: { id: row.id } });
+  res.json({ success: true });
 });
 
 router.put('/order', authenticate, requireRoles('PARENT', 'ADMIN'), async (req: AuthRequest, res: Response) => {

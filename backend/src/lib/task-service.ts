@@ -115,6 +115,15 @@ export async function taskRequest(db: PrismaClient, actor: Actor, method: string
         return {localDate:date,progress,awards:awards.map(a=>({...a,user:members.find(m=>m.userId===a.userId)?.user??{id:a.userId,name:'原家庭成員'}})),settings:settings.flatMap(c=>c.versions.map(v=>({...v,id:c.id}))),children:parent?users:[]};
       }
       requireParent();
+      if (method === 'DELETE' && parts[1]) {
+        const challenge = await tx.dailyChallenge.findFirst({where:{id:parts[1],familyId},include:{versions:{orderBy:{effectiveDate:'desc'},take:1}}});
+        const latest = challenge?.versions[0];
+        if (!challenge || !latest || !latest.isActive) throw new TaskError('找不到可刪除的挑戰',404);
+        const effectiveDate = nextDate(date);
+        const data={title:latest.title,taskIds:json(latest.taskIds),childIds:json(latest.childIds),bonusStars:latest.bonusStars,customTitle:latest.customTitle,customDescription:latest.customDescription,isActive:false};
+        await tx.dailyChallengeVersion.upsert({where:{challengeId_effectiveDate:{challengeId:challenge.id,effectiveDate}},create:{challengeId:challenge.id,effectiveDate,...data},update:data});
+        return {success:true,archived:true,effectiveDate};
+      }
       const input = challengeInput.parse(body);
       input.taskIds = [...new Set(input.taskIds)]; input.childIds = [...new Set(input.childIds)];
       const effectiveDate = method === 'POST' ? date : nextDate(date);
@@ -164,7 +173,13 @@ export async function taskRequest(db: PrismaClient, actor: Actor, method: string
       return {localDate:date,tasks:tasks.filter(t=>t.isActive).map(t=>({...t,completions:pending.filter(c=>c.taskId===t.id&&(parent||c.userId===actor.userId)),myStatus:daily(t)&&[...approved,...legacy].some(c=>c.taskId===t.id)?'APPROVED':pending.some(c=>c.taskId===t.id&&c.userId===actor.userId&&(!daily(t)||c.localDate===date||c.localDate===null))?'PENDING':'READY',...(parent?{nextConfig:future.find(f=>f.id===t.id)}:{})}))};
     }
     if(id==='pending'&&method==='GET') {
-      requireParent();return {completions:await tx.taskCompletion.findMany({where:{status:'PENDING',task:{familyId}},include:{task:true,user:{select:{id:true,name:true}}},orderBy:{completedAt:'desc'}})};
+      requireParent();
+      const include={task:true,user:{select:{id:true,name:true}}} as const;
+      const [completions,rejectedCompletions]=await Promise.all([
+        tx.taskCompletion.findMany({where:{status:'PENDING',task:{familyId}},include,orderBy:{completedAt:'desc'}}),
+        tx.taskCompletion.findMany({where:{status:'REJECTED',task:{familyId}},include,orderBy:{reviewedAt:'desc'},take:100}),
+      ]);
+      return {completions,rejectedCompletions};
     }
     if(id==='order'&&method==='PUT') {
       requireParent();const {ids}=z.object({ids:z.array(z.string()).min(1)}).parse(body);
@@ -208,6 +223,14 @@ export async function taskRequest(db: PrismaClient, actor: Actor, method: string
         trophyUser=c.userId;
       }
       return {completion};
+    }
+    if(id==='completions'&&method==='DELETE') {
+      requireParent();
+      const completion=await tx.taskCompletion.findFirst({where:{id:parts[1],task:{familyId}}});
+      if(!completion)throw new TaskError('找不到任務申請',404);
+      if(completion.status!=='REJECTED')throw new TaskError('只能刪除未核准的任務申請',409);
+      await tx.taskCompletion.delete({where:{id:completion.id}});
+      return {success:true};
     }
     requireParent();
     if(method==='POST'&&!id){

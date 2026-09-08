@@ -5,6 +5,7 @@ import { evaluateTrophies } from '../lib/trophies';
 import { createPrisma } from '../lib/worker-prisma';
 import { authenticate, requireRoles, type WorkerRouteEnv } from './shared';
 
+export function createRewardRoutes(getDb = createPrisma) {
 const rewards = new Hono<WorkerRouteEnv>();
 const time = /^([01]\d|2[0-3]):[0-5]\d$/;
 const date = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,7 +27,7 @@ async function membership(db: any, userId: string) {
 const dateValues = (value: any) => ({ ...value, discountStart: value.discountStart ? new Date(value.discountStart) : value.discountStart, discountEnd: value.discountEnd ? new Date(value.discountEnd) : value.discountEnd });
 
 rewards.get('/', authenticate, async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     if (!mine) return c.json({ rewards: [] });
@@ -39,7 +40,7 @@ rewards.get('/', authenticate, async (c) => {
 rewards.post('/', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const parsed = input.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.errors[0].message }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     if (!mine) return c.json({ error: '請先加入家庭' }, 400);
@@ -53,7 +54,7 @@ rewards.post('/', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
 rewards.put('/discount/all', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const parsed = z.object({ percent: z.number().int().min(1).max(99).nullable(), start: z.string().datetime().nullable(), end: z.string().datetime().nullable() }).safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: '折扣資料無效' }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     if (!mine) return c.json({ error: '請先加入家庭' }, 400);
@@ -63,7 +64,7 @@ rewards.put('/discount/all', authenticate, requireRoles('PARENT', 'ADMIN'), asyn
 });
 
 rewards.get('/wishes', authenticate, async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     const parent = ['PARENT', 'ADMIN'].includes(c.get('user').role);
@@ -74,7 +75,7 @@ rewards.get('/wishes', authenticate, async (c) => {
 rewards.post('/wishes', authenticate, async (c) => {
   const parsed = z.object({ title: z.string().trim().min(1).max(100), description: z.string().max(300).optional() }).safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.errors[0].message }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     if (!mine) return c.json({ error: '請先加入家庭' }, 400);
@@ -83,7 +84,7 @@ rewards.post('/wishes', authenticate, async (c) => {
 });
 
 rewards.get('/redemptions/mine', authenticate, async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     return c.json({ redemptions: await db.rewardRedemption.findMany({ where: { userId: c.get('user').userId }, include: { reward: true }, orderBy: { createdAt: 'desc' }, take: 100 }) });
   } finally { await db.$disconnect(); }
@@ -92,7 +93,7 @@ rewards.get('/redemptions/mine', authenticate, async (c) => {
 rewards.put('/wishes/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const parsed = z.object({ status: z.enum(['APPROVED', 'REJECTED']), cost: z.number().int().positive().optional() }).safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: '資料無效' }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     const wish = await db.wish.findFirst({ where: { id: c.req.param('id'), familyId: mine?.familyId, status: 'PENDING' } });
@@ -108,8 +109,20 @@ rewards.put('/wishes/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async 
   } finally { await db.$disconnect(); }
 });
 
+rewards.delete('/wishes/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  try {
+    const mine = await membership(db, c.get('user').userId);
+    const wish = await db.wish.findFirst({ where: { id: c.req.param('id'), familyId: mine?.familyId } });
+    if (!wish) return c.json({ error: '找不到願望' }, 404);
+    if (wish.status !== 'REJECTED') return c.json({ error: '只能刪除未核准的願望' }, 409);
+    await db.wish.delete({ where: { id: wish.id } });
+    return c.json({ success: true });
+  } finally { await db.$disconnect(); }
+});
+
 rewards.post('/:id/redeem', authenticate, requireRoles('CHILD'), async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     const reward = await db.reward.findUnique({ where: { id: c.req.param('id') }, include: { availableDates: true } });
@@ -128,7 +141,7 @@ rewards.post('/:id/redeem', authenticate, requireRoles('CHILD'), async (c) => {
 });
 
 rewards.post('/redemptions/:id/cancel', authenticate, requireRoles('CHILD'), async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const result = await db.rewardRedemption.updateMany({ where: { id: c.req.param('id'), userId: c.get('user').userId, status: 'PENDING' }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
     if (!result.count) return c.json({ error: '找不到可撤回的申請' }, 404);
@@ -137,17 +150,22 @@ rewards.post('/redemptions/:id/cancel', authenticate, requireRoles('CHILD'), asy
 });
 
 rewards.get('/pending', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
-    return c.json({ redemptions: mine ? await db.rewardRedemption.findMany({ where: { status: 'PENDING', reward: { familyId: mine.familyId } }, include: { reward: true, user: { select: { id: true, name: true, points: true } } }, orderBy: { createdAt: 'desc' } }) : [] });
+    const include = { reward: true, user: { select: { id: true, name: true, points: true } } } as const;
+    const [redemptions, rejectedRedemptions] = mine ? await Promise.all([
+      db.rewardRedemption.findMany({ where: { status: 'PENDING', reward: { familyId: mine.familyId } }, include, orderBy: { createdAt: 'desc' } }),
+      db.rewardRedemption.findMany({ where: { status: 'REJECTED', reward: { familyId: mine.familyId } }, include, orderBy: { reviewedAt: 'desc' }, take: 100 }),
+    ]) : [[], []];
+    return c.json({ redemptions, rejectedRedemptions });
   } finally { await db.$disconnect(); }
 });
 
 rewards.put('/redemptions/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const parsed = z.object({ status: z.enum(['APPROVED', 'REJECTED']) }).safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: '資料無效' }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const actorId = c.get('user').userId;
     const mine = await membership(db, actorId);
@@ -178,10 +196,22 @@ rewards.put('/redemptions/:id', authenticate, requireRoles('PARENT', 'ADMIN'), a
   } finally { await db.$disconnect(); }
 });
 
+rewards.delete('/redemptions/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  try {
+    const mine = await membership(db, c.get('user').userId);
+    const row = await db.rewardRedemption.findUnique({ where: { id: c.req.param('id') }, include: { reward: true } });
+    if (!mine || !row || row.reward.familyId !== mine.familyId) return c.json({ error: '找不到獎勵申請' }, 404);
+    if (row.status !== 'REJECTED') return c.json({ error: '只能刪除未核准的獎勵申請' }, 409);
+    await db.rewardRedemption.delete({ where: { id: row.id } });
+    return c.json({ success: true });
+  } finally { await db.$disconnect(); }
+});
+
 rewards.put('/order', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const parsed = z.object({ ids: z.array(z.string()).min(1) }).safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: '無效排序' }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     if (!mine || await db.reward.count({ where: { familyId: mine.familyId, id: { in: parsed.data.ids } } }) !== parsed.data.ids.length) return c.json({ error: '無權排序' }, 403);
@@ -193,7 +223,7 @@ rewards.put('/order', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) =
 rewards.put('/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const parsed = updateInput.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.errors[0].message }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     const reward = await db.reward.findFirst({ where: { id: c.req.param('id'), familyId: mine?.familyId } });
@@ -211,7 +241,7 @@ rewards.put('/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => 
 });
 
 rewards.delete('/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await membership(db, c.get('user').userId);
     const reward = await db.reward.findFirst({ where: { id: c.req.param('id'), familyId: mine?.familyId } });
@@ -222,4 +252,7 @@ rewards.delete('/:id', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) 
   } finally { await db.$disconnect(); }
 });
 
-export default rewards;
+return rewards;
+}
+
+export default createRewardRoutes();

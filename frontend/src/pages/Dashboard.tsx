@@ -81,6 +81,7 @@ export default function Dashboard() {
   const [deductLoading, setDeductLoading] = useState(false);
   const [deductConfirmed, setDeductConfirmed] = useState(false);
   const [deductForm, setDeductForm] = useState({ userId: '', amount: 1, reason: '' });
+  const [recordMessage, setRecordMessage] = useState('');
 
   const handleAward = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,6 +335,17 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      )}
+
+      <p role="status" className="text-sm text-slate-700">{recordMessage}</p>
+      {((pendingTasks?.rejectedCompletions?.length ?? 0) > 0 || (pendingRedemptions?.rejectedRedemptions?.length ?? 0) > 0) && (
+        <section aria-labelledby="rejected-records-title">
+          <div className="mb-3"><h2 id="rejected-records-title" className="font-bold text-slate-700">未核准紀錄</h2><p className="text-sm text-slate-500">可永久刪除；刪除後無法復原，報表統計也會同步更新。</p></div>
+          <div className="space-y-2">
+            {pendingTasks?.rejectedCompletions?.map((completion) => <article key={completion.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><span className="font-semibold">{completion.user.name}</span><span className="break-words text-sm text-slate-500"> 的任務「{completion.titleSnapshot ?? completion.task.title}」未核准{completion.localDate&&` · ${completion.localDate}`}</span></div><button type="button" className="min-h-11 shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50" onClick={async()=>{if(!window.confirm(`確定永久刪除 ${completion.user.name} 的未核准任務「${completion.titleSnapshot ?? completion.task.title}」嗎？此操作無法復原。`))return;setRecordMessage('');try{await api.deleteTaskCompletion(completion.id);await qc.invalidateQueries({queryKey:['pendingTasks']});qc.invalidateQueries({queryKey:['monthlyReport']});setRecordMessage('未核准任務紀錄已刪除。');}catch(error){setRecordMessage(error instanceof Error?error.message:'刪除任務紀錄失敗');}}}>刪除紀錄</button></article>)}
+            {pendingRedemptions?.rejectedRedemptions?.map((redemption) => <article key={redemption.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><span className="font-semibold">{redemption.user.name}</span><span className="break-words text-sm text-slate-500"> 的獎勵申請「{redemption.reward.title}」未核准</span></div><button type="button" className="min-h-11 shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50" onClick={async()=>{if(!window.confirm(`確定永久刪除 ${redemption.user.name} 的未核准獎勵申請「${redemption.reward.title}」嗎？此操作無法復原。`))return;setRecordMessage('');try{await api.deleteRedemption(redemption.id);await qc.invalidateQueries({queryKey:['pendingRedemptions']});qc.invalidateQueries({queryKey:['monthlyReport']});setRecordMessage('未核准獎勵申請已刪除。');}catch(error){setRecordMessage(error instanceof Error?error.message:'刪除獎勵申請失敗');}}}>刪除紀錄</button></article>)}
+          </div>
+        </section>
       )}
 
       {deductOpen && (

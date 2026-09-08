@@ -8,10 +8,11 @@ import { taskRequest, challengeInput, nextDate } from '../src/lib/task-service';
 import { monthlyChallengeSummary } from '../src/lib/challenge-report';
 import { createReportRoutes } from '../src/worker-routes/reports';
 import { createTaskRoutes } from '../src/worker-routes/tasks';
+import { createRewardRoutes } from '../src/worker-routes/rewards';
 import { signToken } from '../src/lib/auth';
 
 let pg:PGlite, server:PGLiteSocketServer, db:PrismaClient;
-const parent={userId:'parent',role:'PARENT'}, child={userId:'child',role:'CHILD'}, sibling={userId:'sibling',role:'CHILD'};
+const parent={userId:'parent',role:'PARENT'}, admin={userId:'admin',role:'ADMIN'}, child={userId:'child',role:'CHILD'}, sibling={userId:'sibling',role:'CHILD'};
 const today=new Date('2026-09-07T04:00:00Z'), tomorrow=new Date('2026-09-08T04:00:00Z');
 const run=(actor:typeof parent,method:string,path:string,body:unknown={},now=today)=>taskRequest(db,actor,method,path,body,now);
 before(async()=>{
@@ -28,10 +29,10 @@ before(async()=>{
 after(async()=>{await db?.$disconnect();await server?.stop();await pg?.close();});
 beforeEach(async()=>{
   await pg.exec('TRUNCATE "ChallengeAward","TaskDaySnapshot","DailyChallengeVersion","DailyChallenge","DailyTaskVersion","User","Family" CASCADE');
-  await db.user.createMany({data:[{id:'parent',email:'parent@test.invalid',name:'家長',role:'PARENT',passwordHash:'test'},{id:'child',email:'child@test.invalid',name:'孩子',role:'CHILD',passwordHash:'test'},{id:'sibling',email:'sibling@test.invalid',name:'手足',role:'CHILD',passwordHash:'test'},{id:'outsider',email:'outsider@test.invalid',name:'外人',role:'PARENT',passwordHash:'test'}]});
+  await db.user.createMany({data:[{id:'parent',email:'parent@test.invalid',name:'家長',role:'PARENT',passwordHash:'test'},{id:'admin',email:'admin@test.invalid',name:'管理者',role:'ADMIN',passwordHash:'test'},{id:'child',email:'child@test.invalid',name:'孩子',role:'CHILD',passwordHash:'test'},{id:'sibling',email:'sibling@test.invalid',name:'手足',role:'CHILD',passwordHash:'test'},{id:'outsider',email:'outsider@test.invalid',name:'外人',role:'PARENT',passwordHash:'test'}]});
   await db.family.create({data:{id:'family',name:'測試家庭',inviteCode:'TEST',ownerId:'parent'}});
   await db.family.create({data:{id:'other',name:'其他家庭',inviteCode:'OTHER',ownerId:'outsider'}});
-  await db.familyMember.createMany({data:['parent','child','sibling'].map(userId=>({userId,familyId:'family'})).concat([{userId:'outsider',familyId:'other'}])});
+  await db.familyMember.createMany({data:['parent','admin','child','sibling'].map(userId=>({userId,familyId:'family'})).concat([{userId:'outsider',familyId:'other'}])});
   await db.task.createMany({data:[5,0,5].map((points,i)=>({id:`task${i}`,familyId:'family',createdById:'parent',title:['A','B','C'][i],points,isRecurring:true,recurringType:'daily'}))});
 });
 async function challenge(overrides:Record<string,unknown>={}) {
@@ -72,6 +73,19 @@ test('rejection can be resubmitted; old request replay stays rejected',async()=>
   assert.equal((await submit('task0',child,today,'first-request')).status,'REJECTED');
   const retry=await submit('task0',child,today,'retry-request');assert.notEqual(retry.id,first.id);
   await approve(retry.id);assert.equal((await db.user.findUniqueOrThrow({where:{id:'child'}})).points,5);
+});
+test('parents and admins permanently delete only rejected task applications in their family',async()=>{
+  const rejected=await submit('task0',child,today,'delete-rejected');
+  await run(parent,'PUT',`/completions/${rejected.id}`,{status:'REJECTED'});
+  const pending=await submit('task1',child,today,'keep-pending');
+  assert.equal((await run(parent,'GET','/pending')).rejectedCompletions.length,1);
+  await assert.rejects(run(child,'DELETE',`/completions/${rejected.id}`),/權限/);
+  await assert.rejects(run({userId:'outsider',role:'PARENT'},'DELETE',`/completions/${rejected.id}`),/找不到/);
+  await assert.rejects(run(parent,'DELETE',`/completions/${pending.id}`),/只能刪除/);
+  await run(admin,'DELETE',`/completions/${rejected.id}`);
+  assert.equal(await db.taskCompletion.count({where:{id:rejected.id}}),0);
+  assert.equal(await db.taskSubmissionRequest.count({where:{completionId:rejected.id}}),0);
+  await assert.rejects(run(parent,'DELETE',`/completions/${rejected.id}`),/找不到/);
 });
 test('next-day approval uses submission day and frozen rewards; next day has independent applications',async()=>{
   const ch=await challenge({customTitle:'原本獎勵'});
@@ -160,6 +174,38 @@ test('new challenge after first submission starts tomorrow; disabling keeps hist
   const dayAfter=new Date('2026-09-09T04:00:00Z');
   assert.equal((await run(child,'GET','/challenges',{},dayAfter)).progress.length,0);
   assert.equal((await run(child,'GET','/challenges',{},dayAfter)).awards.length,1);
+});
+test('deleting a challenge disables it tomorrow and preserves today, awards, and point history',async()=>{
+  const c=await challenge({taskIds:['task0'],bonusStars:2});
+  await approve((await submit('task0')).id);
+  const beforeTransactions=await db.pointTransaction.count();
+  const result=await run(parent,'DELETE',`/challenges/${c.id}`);
+  assert.equal(result.effectiveDate,'2026-09-08');
+  assert.equal((await run(child,'GET','/challenges')).progress.length,1);
+  assert.equal((await run(child,'GET','/challenges',{},tomorrow)).progress.length,0);
+  assert.equal(await db.challengeAward.count({where:{challengeId:c.id}}),1);
+  assert.equal(await db.pointTransaction.count(),beforeTransactions);
+  await assert.rejects(run(child,'DELETE',`/challenges/${c.id}`),/權限/);
+  await assert.rejects(run(parent,'DELETE',`/challenges/${c.id}`,{},tomorrow),/找不到/);
+});
+
+test('reward routes permanently delete only same-family rejected wishes and redemptions',async()=>{
+  const reward=await db.reward.create({data:{id:'reward',familyId:'family',createdById:'parent',title:'看電影',cost:10}});
+  const rejectedWish=await db.wish.create({data:{id:'wish-rejected',familyId:'family',userId:'child',title:'腳踏車',status:'REJECTED'}});
+  const pendingWish=await db.wish.create({data:{id:'wish-pending',familyId:'family',userId:'child',title:'書',status:'PENDING'}});
+  const rejectedRedemption=await db.rewardRedemption.create({data:{id:'redemption-rejected',rewardId:reward.id,userId:'child',status:'REJECTED',reservedPoints:10}});
+  const pendingRedemption=await db.rewardRedemption.create({data:{id:'redemption-pending',rewardId:reward.id,userId:'child',status:'PENDING',reservedPoints:10}});
+  const app=createRewardRoutes(()=>db),env={DATABASE_URL:'unused-test',JWT_SECRET:'test-secret'};
+  const call=(actor:typeof parent,path:string)=>app.request(`http://localhost${path}`,{method:'DELETE',headers:{Authorization:`Bearer ${signToken({...actor,email:`${actor.userId}@test.invalid`},'test-secret')}`}},env);
+  assert.equal((await call(child,`/wishes/${rejectedWish.id}`)).status,403);
+  assert.equal((await call({userId:'outsider',role:'PARENT'},`/wishes/${rejectedWish.id}`)).status,404);
+  assert.equal((await call(parent,`/wishes/${pendingWish.id}`)).status,409);
+  assert.equal((await call(admin,`/wishes/${rejectedWish.id}`)).status,200);
+  assert.equal((await call(parent,`/wishes/${rejectedWish.id}`)).status,404);
+  assert.equal((await call(parent,`/redemptions/${pendingRedemption.id}`)).status,409);
+  assert.equal((await call(admin,`/redemptions/${rejectedRedemption.id}`)).status,200);
+  assert.equal(await db.wish.count({where:{id:rejectedWish.id}}),0);
+  assert.equal(await db.rewardRedemption.count({where:{id:rejectedRedemption.id}}),0);
 });
 test('family-local midnight resets daily task and same-day legacy approval does not pay again',async()=>{
   const beforeMidnight=new Date('2026-09-07T15:59:59Z'),afterMidnight=new Date('2026-09-07T16:00:01Z');

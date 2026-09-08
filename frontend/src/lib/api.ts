@@ -119,6 +119,7 @@ export const api = {
   getTasks: () => request<{ tasks: Task[]; localDate: string }>('/api/tasks'),
   getChallenges: () => request<ChallengeData>('/api/tasks/challenges'),
   saveChallenge: (data: ChallengeInput, id?: string) => request(`/api/tasks/challenges${id ? `/${id}` : ''}`, { method:id?'PUT':'POST', body:JSON.stringify(data) }),
+  deleteChallenge: (id: string) => request<{ success:boolean; archived:boolean; effectiveDate:string }>(`/api/tasks/challenges/${id}`, { method:'DELETE' }),
   fulfillChallengeAward: (id: string) => request(`/api/tasks/challenge-awards/${id}/fulfill`, { method:'PUT', body:'{}' }),
 
   createTask: (data: {
@@ -158,9 +159,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
+  deleteTaskCompletion: (id: string) => request<{ success:boolean }>(`/api/tasks/completions/${id}`, { method:'DELETE' }),
 
   getPendingTasks: () =>
-    request<{ completions: TaskCompletion[] }>('/api/tasks/pending'),
+    request<{ completions: TaskCompletion[]; rejectedCompletions: TaskCompletion[] }>('/api/tasks/pending'),
 
   // Rewards
   getRewards: () => request<{ rewards: Reward[] }>('/api/rewards'),
@@ -194,6 +196,7 @@ export const api = {
   getWishes: () => request<{ wishes: Wish[] }>('/api/rewards/wishes'),
   createWish: (title: string, description?: string) => request<{ wish: Wish }>('/api/rewards/wishes', { method: 'POST', body: JSON.stringify({ title, description }) }),
   reviewWish: (id: string, status: 'APPROVED' | 'REJECTED', cost?: number) => request(`/api/rewards/wishes/${id}`, { method: 'PUT', body: JSON.stringify({ status, cost }) }),
+  deleteWish: (id: string) => request<{ success:boolean }>(`/api/rewards/wishes/${id}`, { method:'DELETE' }),
 
   redeemReward: (id: string) =>
     request(`/api/rewards/${id}/redeem`, { method: 'POST' }),
@@ -206,9 +209,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
+  deleteRedemption: (id: string) => request<{ success:boolean }>(`/api/rewards/redemptions/${id}`, { method:'DELETE' }),
 
   getPendingRedemptions: () =>
-    request<{ redemptions: RewardRedemption[] }>('/api/rewards/pending'),
+    request<{ redemptions: RewardRedemption[]; rejectedRedemptions: RewardRedemption[] }>('/api/rewards/pending'),
 
   // Allowance
   getAllowance: () => request<{ requests: AllowanceRedemption[]; settings: AllowanceSettings | null }>('/api/allowance'),

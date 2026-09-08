@@ -2,7 +2,8 @@ import { test,expect,Page } from '@playwright/test';
 const task={id:'a',title:'閱讀 20 分鐘',description:'讀完今天的故事',points:5,isRecurring:true,recurringType:'daily',keepAfterCompletion:true,maxCompletions:null,completions:[],myStatus:'READY'};
 const award={id:'award',challengeId:'challenge',userId:'child',user:{id:'child',name:'小星'},localDate:'2026-09-07',title:'每日閱讀',bonusStars:0,customTitle:'玩電動 30 分鐘',customDescription:'晚餐後一起玩',earnedAt:'2026-09-07T04:00:00Z',fulfilledAt:null};
 async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boolean}={}) {
-  let status='READY',submits=0,fulfills=0,fulfilled=false;
+  let status='READY',submits=0,fulfills=0,fulfilled=false,challengeDeletes=0,taskDeletes=0,redemptionDeletes=0,wishDeletes=0;
+  let showChallenge=true,showRejectedTask=true,showRejectedRedemption=true,showRejectedWish=true;
   const saved:any[]=[];
   await page.addInitScript(()=>localStorage.setItem('token','test-token'));
   await page.route('**/api/**',async route=>{
@@ -15,11 +16,18 @@ async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boo
       if(options.lost){await route.abort('failed');return;}
       json={completion:{id:'completion',status:'PENDING',localDate:'2026-09-07'}};
     }
+    else if(path==='/api/tasks/challenges/challenge'&&route.request().method()==='DELETE'){challengeDeletes++;showChallenge=false;json={success:true,archived:true,effectiveDate:'2026-09-08'};}
     else if(path==='/api/tasks/challenges'&&route.request().method()==='POST'){saved.push(route.request().postDataJSON());json={success:true};}
-    else if(path==='/api/tasks/challenges')json={localDate:'2026-09-07',settings:[],children:role==='CHILD'?[]:[{id:'child',name:'小星'}],progress:[{id:'challenge',title:'每日閱讀',user:{id:'child',name:'小星'},localDate:'2026-09-07',taskIds:['a'],childIds:['child'],tasks:[{id:'a',title:task.title,status:status==='PENDING'?'PENDING':'READY'}],bonusStars:0,customTitle:award.customTitle,isActive:true,award:null}],awards:[{...award,fulfilledAt:fulfilled?'2026-09-07T05:00:00Z':null}]};
+    else if(path==='/api/tasks/challenges')json={localDate:'2026-09-07',settings:role==='CHILD'||!showChallenge?[]:[{id:'challenge',effectiveDate:'2026-09-07',title:'每日閱讀',taskIds:['a'],childIds:['child'],bonusStars:0,customTitle:'玩電動 30 分鐘',customDescription:'晚餐後一起玩',isActive:true}],children:role==='CHILD'?[]:[{id:'child',name:'小星'}],progress:[{id:'challenge',title:'每日閱讀',user:{id:'child',name:'小星'},localDate:'2026-09-07',taskIds:['a'],childIds:['child'],tasks:[{id:'a',title:task.title,status:status==='PENDING'?'PENDING':'READY'}],bonusStars:0,customTitle:award.customTitle,isActive:true,award:null}],awards:[{...award,fulfilledAt:fulfilled?'2026-09-07T05:00:00Z':null}]};
     else if(path==='/api/tasks/challenge-awards/award/fulfill'){fulfills++;await new Promise(r=>setTimeout(r,300));fulfilled=true;json={success:true};}
     else if(path==='/api/reports/monthly')json={month:'2026-09',timezone:'Asia/Taipei',family:{id:'family',name:'測試家庭'},familySummary:{earned:10,spent:0,deducted:0,tasks:3,allowanceTwd:0,trophies:0},children:[{user:{id:'child',name:'小星'},summary:{openingPoints:0,earned:10,rewardSpent:0,allowanceSpent:0,deducted:0,reversed:0,closingPoints:10},taskSummary:{approvedCount:3,rejectedCount:0,totalPoints:10,topTasks:['閱讀']},challengeSummary:{bonusStars:0,awards:[award]},allowanceTwd:0,trophies:[],transactions:[]}]};
-    else if(path==='/api/families/me')json={family:{id:'family',members:[{user:{id:'child',name:'小星',role:'CHILD'}}]}};
+    else if(path==='/api/tasks/pending')json={completions:[],rejectedCompletions:showRejectedTask?[{id:'rejected-task',status:'REJECTED',completedAt:'2026-09-07T04:00:00Z',localDate:'2026-09-07',titleSnapshot:'整理書桌',task:{...task,title:'整理書桌'},user:{id:'child',name:'小星'}}]:[]};
+    else if(path==='/api/tasks/completions/rejected-task'&&route.request().method()==='DELETE'){taskDeletes++;showRejectedTask=false;json={success:true};}
+    else if(path==='/api/rewards/pending')json={redemptions:[],rejectedRedemptions:showRejectedRedemption?[{id:'rejected-redemption',status:'REJECTED',createdAt:'2026-09-07T04:00:00Z',reservedPoints:10,reward:{id:'reward',title:'看電影',cost:10},user:{id:'child',name:'小星',points:10}}]:[]};
+    else if(path==='/api/rewards/redemptions/rejected-redemption'&&route.request().method()==='DELETE'){redemptionDeletes++;showRejectedRedemption=false;json={success:true};}
+    else if(path==='/api/rewards/wishes/rejected-wish'&&route.request().method()==='DELETE'){wishDeletes++;showRejectedWish=false;json={success:true};}
+    else if(path==='/api/rewards/wishes')json={wishes:showRejectedWish?[{id:'rejected-wish',title:'腳踏車',status:'REJECTED',user:{id:'child',name:'小星'}}]:[]};
+    else if(path==='/api/families/me')json={family:{id:'family',name:'測試家庭',inviteCode:'TEST',ownerId:role==='CHILD'?'parent':'parent',members:[{user:{id:'child',name:'小星',role:'CHILD',points:10}}]}};
     else if(path.includes('/tasks/groups'))json={groups:[]};
     else if(path.includes('/rewards'))json={rewards:[],redemptions:[],wishes:[]};
     else if(path.includes('/balance'))json={availablePoints:10};
@@ -31,7 +39,7 @@ async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boo
     }
     await route.fulfill({json});
   });
-  return {submits:()=>submits,fulfills:()=>fulfills,saved};
+  return {submits:()=>submits,fulfills:()=>fulfills,challengeDeletes:()=>challengeDeletes,taskDeletes:()=>taskDeletes,redemptionDeletes:()=>redemptionDeletes,wishDeletes:()=>wishDeletes,saved};
 }
 test('mobile submission gives immediate feedback, rejects rapid clicks, survives reload',async({page})=>{
   await page.setViewportSize({width:360,height:800});const state=await mock(page);
@@ -76,6 +84,22 @@ test('child has no fulfillment control and More is keyboard accessible',async({p
   const more=page.getByRole('navigation',{name:'手機主要導覽'}).getByRole('link',{name:'更多'});
   await more.focus();await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'更多'})).toBeVisible();
   const report=page.getByRole('navigation',{name:'更多功能'}).getByRole('link',{name:'月報'});await report.focus();await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'每月回顧'})).toBeVisible();
+});
+
+test('parent can delete a challenge and rejected records on a narrow viewport',async({page})=>{
+  test.setTimeout(60000);
+  await page.setViewportSize({width:360,height:800});const state=await mock(page,'PARENT');
+  page.on('dialog',dialog=>dialog.accept());
+  await page.goto('/app/tasks');await page.getByText('管理挑戰設定').click();
+  await page.getByRole('button',{name:'刪除 每日閱讀'}).click();
+  await expect(page.getByText(/2026-09-08 起不再出現/)).toBeVisible();expect(state.challengeDeletes()).toBe(1);
+  await page.goto('/app');
+  await page.getByRole('button',{name:'刪除紀錄'}).first().click();
+  await expect(page.getByText('未核准任務紀錄已刪除。')).toBeVisible();expect(state.taskDeletes()).toBe(1);
+  await page.getByRole('article').filter({hasText:'獎勵申請「看電影」未核准'}).getByRole('button',{name:'刪除紀錄'}).click();
+  await expect(page.getByText('未核准獎勵申請已刪除。')).toBeVisible();expect(state.redemptionDeletes()).toBe(1);
+  await page.goto('/app/rewards');await page.getByRole('button',{name:'刪除紀錄'}).click();expect(state.wishDeletes()).toBe(1);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
 test('large text and unavailable session storage still permit a single submission',async({page})=>{

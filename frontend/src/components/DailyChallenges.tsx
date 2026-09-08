@@ -49,6 +49,13 @@ export default function DailyChallenges({tasks}:{tasks:Task[]}) {
     catch(e){setMessage(e instanceof Error?e.message:'儲存失敗');}
     finally{lock.current=false;setBusy(false);}
   };
+  const remove=async(id:string,title:string)=>{
+    if(lock.current||!window.confirm(`確定刪除挑戰「${title}」嗎？明日起不再出現，今天及歷史成果會保留。`))return;
+    lock.current=true;setBusy(true);setMessage('');
+    try{const result=await api.deleteChallenge(id);await qc.invalidateQueries({queryKey:['challenges']});qc.invalidateQueries({queryKey:['tasks']});qc.invalidateQueries({queryKey:['monthlyReport']});setMessage(`已刪除挑戰；${result.effectiveDate} 起不再出現，歷史成果已保留。`);}
+    catch(e){setMessage(e instanceof Error?e.message:'刪除挑戰失敗');}
+    finally{lock.current=false;setBusy(false);}
+  };
   return <section className="space-y-4" aria-label="每日挑戰">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-extrabold">每日挑戰</h2><p className="text-sm text-slate-600">全部任務通過審核，自動獲得額外獎勵。{data&&`今日 ${data.localDate}`}</p></div>{parent&&<button type="button" className={`${button} bg-primary-700 text-white print:hidden`} onClick={()=>{setEditing(undefined);setForm({...empty,taskIds:[],childIds:[]});setKind('stars');setOpen(true);setMessage('');}}>新增挑戰</button>}</div>
     <p role="status" className="text-sm text-slate-700">{message}</p>
@@ -63,7 +70,7 @@ export default function DailyChallenges({tasks}:{tasks:Task[]}) {
       <div className="flex gap-2"><button type="button" disabled={busy} onClick={()=>setOpen(false)} className={`${button} bg-slate-100`}>取消</button><button disabled={busy} className={`${button} bg-primary-700 text-white`}>{busy?'儲存中…':'儲存挑戰'}</button></div>
     </form>}
     {error?<p role="alert">挑戰載入失敗，請重新整理。</p>:!data?<p role="status">載入中…</p>:<>
-      {parent&&data.settings.length>0&&<details className="print:hidden"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold">管理挑戰設定（{data.settings.length}）</summary>{data.settings.map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 py-2"><span className="text-sm">{c.title} · {c.isActive?'啟用':'停用'} · {c.effectiveDate} 起</span><button type="button" className={`${button} text-primary-700`} onClick={()=>{setEditing(c.id);setForm(c);setKind(c.customTitle?(c.bonusStars?'both':'custom'):'stars');setOpen(true);setMessage('');}}>編輯 {c.title}</button></div>)}</details>}
+      {parent&&data.settings.length>0&&<details className="print:hidden"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold">管理挑戰設定（{data.settings.length}）</summary>{data.settings.map(c=><div key={c.id} className="flex flex-col gap-2 border-b border-slate-200 py-3 sm:flex-row sm:items-center sm:justify-between"><span className="break-words text-sm">{c.title} · {c.isActive?'啟用':'停用'} · {c.effectiveDate} 起</span><div className="flex flex-wrap gap-2"><button type="button" disabled={busy} className={`${button} text-primary-700`} onClick={()=>{setEditing(c.id);setForm(c);setKind(c.customTitle?(c.bonusStars?'both':'custom'):'stars');setOpen(true);setMessage('');}}>編輯 {c.title}</button>{c.isActive&&<button type="button" disabled={busy} className={`${button} text-red-700`} onClick={()=>remove(c.id,c.title)}>{busy?'處理中…':`刪除 ${c.title}`}</button>}</div></div>)}</details>}
       {!data.progress.length&&<p className="text-sm text-slate-500">今天尚無適用的每日挑戰。</p>}
       {data.progress.map(c=><article key={`${c.id}-${c.user.id}`} className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="break-words font-bold">{parent&&`${c.user.name} · `}{c.title}</h3><p className="text-sm font-bold">已核准 {c.tasks.filter(t=>t.status==='APPROVED').length}／{c.tasks.length} · {c.bonusStars>0&&`額外 ⭐ ${c.bonusStars} `}{c.customTitle}</p>{c.customDescription&&<p className="whitespace-pre-wrap text-sm text-slate-600">{c.customDescription}</p>}<ul className="space-y-1 text-sm">{c.tasks.map(t=><li key={t.id}>{t.status==='APPROVED'?'✓ 已核准':t.status==='PENDING'?'等待審核':'尚未完成'} · {t.title}</li>)}</ul>{c.award&&<p className="text-sm font-bold text-emerald-800">{c.bonusStars>0?'加碼星星已入帳。 ':''}{c.customTitle?(c.award.fulfilledAt?'自訂獎勵已兌現。':'自訂獎勵已獲得，可到「獎勵」查看。'):'今日挑戰已達成！'}</p>}</article>)}
     </>}
