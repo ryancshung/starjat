@@ -9,7 +9,10 @@ import { monthlyChallengeSummary } from '../src/lib/challenge-report';
 import { createReportRoutes } from '../src/worker-routes/reports';
 import { createTaskRoutes } from '../src/worker-routes/tasks';
 import { createRewardRoutes } from '../src/worker-routes/rewards';
-import { signToken } from '../src/lib/auth';
+import { createFamiliesRoutes } from '../src/worker-routes/families';
+import { createAdminRoutes } from '../src/worker-routes/admin';
+import { createAuthRoutes } from '../src/worker-routes/auth';
+import { comparePassword, hashPassword, signToken, verifyToken } from '../src/lib/auth';
 
 let pg:PGlite, server:PGLiteSocketServer, db:PrismaClient;
 const parent={userId:'parent',role:'PARENT'}, admin={userId:'admin',role:'ADMIN'}, child={userId:'child',role:'CHILD'}, sibling={userId:'sibling',role:'CHILD'};
@@ -206,6 +209,35 @@ test('reward routes permanently delete only same-family rejected wishes and rede
   assert.equal((await call(admin,`/redemptions/${rejectedRedemption.id}`)).status,200);
   assert.equal(await db.wish.count({where:{id:rejectedWish.id}}),0);
   assert.equal(await db.rewardRedemption.count({where:{id:rejectedRedemption.id}}),0);
+});
+
+test('parents reset same-family child passwords, admins reset other users, and existing sessions remain valid',async()=>{
+  await db.user.update({where:{id:'child'},data:{passwordHash:await hashPassword('old-password')}});
+  const env={DATABASE_URL:'unused-test',JWT_SECRET:'test-secret'};
+  const families=createFamiliesRoutes(()=>db),adminRoutes=createAdminRoutes(()=>db),authRoutes=createAuthRoutes(()=>db);
+  const request=(app:any,actor:typeof parent,path:string,body:unknown,passwordToken?:string)=>app.request(`http://localhost${path}`,{method:'PUT',headers:{Authorization:`Bearer ${passwordToken??signToken({...actor,email:`${actor.userId}@test.invalid`},'test-secret')}`,'Content-Type':'application/json'},body:JSON.stringify(body)},env);
+  const existingChildToken=signToken({...child,email:'child@test.invalid'},'test-secret');
+  assert.equal((await request(families,child,'/members/child/password',{password:'new-password'})).status,403);
+  assert.equal((await request(families,{userId:'outsider',role:'PARENT'},'/members/child/password',{password:'new-password'})).status,404);
+  assert.equal((await request(families,parent,'/members/parent/password',{password:'new-password'})).status,403);
+  assert.equal((await request(families,parent,'/members/child/password',{password:'short'})).status,400);
+  assert.equal((await request(families,parent,'/members/child/password',{password:'new-password'})).status,200);
+  assert.equal(await comparePassword('new-password',(await db.user.findUniqueOrThrow({where:{id:'child'}})).passwordHash),true);
+  assert.equal((await authRoutes.request('http://localhost/me',{headers:{Authorization:`Bearer ${existingChildToken}`}},env)).status,200);
+  assert.equal((await request(adminRoutes,admin,'/users/admin/password',{password:'admin-new'})).status,400);
+  assert.equal((await request(adminRoutes,parent,'/users/child/password',{password:'parent-denied'})).status,403);
+  assert.equal((await request(adminRoutes,admin,'/users/parent/password',{password:'parent-new'})).status,200);
+  assert.equal(await comparePassword('parent-new',(await db.user.findUniqueOrThrow({where:{id:'parent'}})).passwordHash),true);
+});
+
+test('valid legacy expiring tokens are upgraded by auth me to permanent tokens',async()=>{
+  const env={DATABASE_URL:'unused-test',JWT_SECRET:'test-secret'},app=createAuthRoutes(()=>db);
+  const legacy=signToken({...parent,email:'parent@test.invalid'},'test-secret','1h');
+  assert.ok(verifyToken(legacy,'test-secret').exp);
+  const response=await app.request('http://localhost/me',{headers:{Authorization:`Bearer ${legacy}`}},env);
+  assert.equal(response.status,200);
+  const body=await response.json() as any;
+  assert.ok(body.token);assert.equal(verifyToken(body.token,'test-secret').exp,undefined);
 });
 test('family-local midnight resets daily task and same-day legacy approval does not pay again',async()=>{
   const beforeMidnight=new Date('2026-09-07T15:59:59Z'),afterMidnight=new Date('2026-09-07T16:00:01Z');

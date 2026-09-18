@@ -4,7 +4,6 @@ import { PrismaClient } from '@prisma/client';
 export interface WorkerEnv {
   DATABASE_URL: string;
   JWT_SECRET: string;
-  JWT_EXPIRES_IN?: string;
   CORS_ORIGIN?: string;
   TASKS_MAINTENANCE?: string;
 }

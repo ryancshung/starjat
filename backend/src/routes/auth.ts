@@ -164,7 +164,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
       res.status(404).json({ error: '使用者不存在' });
       return;
     }
-    res.json({ user });
+    res.json({ user, ...(req.user!.exp ? { token: signToken({ userId: user.id, email: user.email, role: user.role }) } : {}) });
   } catch {
     res.status(500).json({ error: '取得使用者資料失敗' });
   }

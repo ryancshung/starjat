@@ -126,6 +126,8 @@ npm run dev
 | GET/POST | /api/trophies | 獎盃列表與自訂獎盃 |
 | GET | /api/admin/users | 使用者列表（Admin） |
 | GET | /api/admin/families | 家庭列表（Admin） |
+| PUT | /api/families/members/:userId/password | 家長重設同家庭孩子密碼 |
+| PUT | /api/admin/users/:id/password | Admin 重設其他使用者密碼 |
 
 ## 環境變數
 
@@ -135,7 +137,6 @@ npm run dev
 DATABASE_URL="postgresql://user:password@host:5432/starjar?sslmode=require"
 
 JWT_SECRET="your-super-secret-jwt-key-change-me"
-JWT_EXPIRES_IN="7d"
 PORT=3001
 CORS_ORIGIN="http://localhost:5173"
 ```

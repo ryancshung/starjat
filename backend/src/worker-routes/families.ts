@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { generateInviteCode } from '../lib/auth';
+import { generateInviteCode, hashPassword } from '../lib/auth';
 import { isValidTimezone } from '../lib/family-time';
 import { createPrisma } from '../lib/worker-prisma';
 import { authenticate, requireRoles, type WorkerRouteEnv } from './shared';
 
+export function createFamiliesRoutes(getDb = createPrisma) {
 const families = new Hono<WorkerRouteEnv>();
 const memberSelect = { id: true, name: true, email: true, role: true, points: true } as const;
 const includeFamily = { members: { include: { user: { select: memberSelect } } } } as const;
@@ -12,7 +13,7 @@ const includeFamily = { members: { include: { user: { select: memberSelect } } }
 families.post('/', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const body = z.object({ name: z.string().min(1, '請輸入家庭名稱') }).safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.errors[0].message }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const userId = c.get('user').userId;
     if (await db.familyMember.findFirst({ where: { userId } })) return c.json({ error: '您已經加入一個家庭' }, 400);
@@ -27,7 +28,7 @@ families.post('/', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
 families.post('/join', authenticate, async (c) => {
   const body = z.object({ inviteCode: z.string().min(4, '請輸入邀請碼') }).safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.errors[0].message }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const userId = c.get('user').userId;
     if (await db.familyMember.findFirst({ where: { userId } })) return c.json({ error: '您已經加入一個家庭' }, 400);
@@ -40,7 +41,7 @@ families.post('/join', authenticate, async (c) => {
 });
 
 families.get('/me', authenticate, async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const membership = await db.familyMember.findFirst({ where: { userId: c.get('user').userId }, include: { family: { include: includeFamily } } });
     return c.json({ family: membership?.family ?? null });
@@ -51,7 +52,7 @@ families.get('/me', authenticate, async (c) => {
 families.put('/me', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const body = z.object({ name: z.string().min(1, '請輸入家庭名稱').max(100) }).safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.errors[0].message }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const membership = await db.familyMember.findFirst({ where: { userId: c.get('user').userId }, include: { family: true } });
     if (!membership || membership.family.ownerId !== c.get('user').userId) return c.json({ error: '只有家庭管理者可以修改家庭資料' }, 403);
@@ -62,7 +63,7 @@ families.put('/me', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => 
 families.put('/settings', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const body = z.object({ timezone: z.string().optional(), pointsPerTwd: z.number().int().positive().nullable().optional() }).safeParse(await c.req.json());
   if (!body.success || (body.data.timezone && !isValidTimezone(body.data.timezone))) return c.json({ error: '家庭設定無效' }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const membership = await db.familyMember.findFirst({ where: { userId: c.get('user').userId }, include: { family: true } });
     if (!membership || membership.family.ownerId !== c.get('user').userId) return c.json({ error: '只有家庭管理者可以修改設定' }, 403);
@@ -73,7 +74,7 @@ families.put('/settings', authenticate, requireRoles('PARENT', 'ADMIN'), async (
 families.put('/members/:userId/settings', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
   const body = z.object({ canDeductPoints: z.boolean().optional(), monthlyAllowanceLimitTwd: z.number().int().positive().nullable().optional() }).safeParse(await c.req.json());
   if (!body.success) return c.json({ error: '成員設定無效' }, 400);
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const mine = await db.familyMember.findFirst({ where: { userId: c.get('user').userId }, include: { family: true } });
     if (!mine || mine.family.ownerId !== c.get('user').userId) return c.json({ error: '只有家庭管理者可以修改成員權限' }, 403);
@@ -83,8 +84,22 @@ families.put('/members/:userId/settings', authenticate, requireRoles('PARENT', '
   } finally { await db.$disconnect(); }
 });
 
+families.put('/members/:userId/password', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
+  const body = z.object({ password: z.string().min(6, '密碼至少 6 個字元').max(128, '密碼最多 128 個字元') }).safeParse(await c.req.json());
+  if (!body.success) return c.json({ error: body.error.errors[0].message }, 400);
+  const db = getDb(c.env.DATABASE_URL);
+  try {
+    const mine = await db.familyMember.findFirst({ where: { userId: c.get('user').userId } });
+    const target = mine ? await db.familyMember.findFirst({ where: { familyId: mine.familyId, userId: c.req.param('userId') }, include: { user: true } }) : null;
+    if (!mine || !target) return c.json({ error: '找不到同家庭的孩子' }, 404);
+    if (target.user.role !== 'CHILD') return c.json({ error: '家長只能重設孩子的密碼' }, 403);
+    await db.user.update({ where: { id: target.userId }, data: { passwordHash: await hashPassword(body.data.password) } });
+    return c.json({ success: true });
+  } finally { await db.$disconnect(); }
+});
+
 families.delete('/members/:userId', authenticate, requireRoles('PARENT', 'ADMIN'), async (c) => {
-  const db = createPrisma(c.env.DATABASE_URL);
+  const db = getDb(c.env.DATABASE_URL);
   try {
     const userId = c.get('user').userId;
     const targetUserId = c.req.param('userId');
@@ -98,4 +113,7 @@ families.delete('/members/:userId', authenticate, requireRoles('PARENT', 'ADMIN'
   } finally { await db.$disconnect(); }
 });
 
-export default families;
+return families;
+}
+
+export default createFamiliesRoutes();

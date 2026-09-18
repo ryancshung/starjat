@@ -57,7 +57,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  me: () => request<{ user: User & { memberships: Membership[] } }>('/api/auth/me'),
+  me: () => request<{ user: User & { memberships: Membership[] }; token?: string }>('/api/auth/me'),
 
   // Families
   createFamily: (name: string) =>
@@ -85,6 +85,8 @@ export const api = {
 
   updateMemberSettings: (userId: string, data: { canDeductPoints?: boolean; monthlyAllowanceLimitTwd?: number | null }) =>
     request<{ membership: Pick<Family['members'][number], 'canDeductPoints' | 'monthlyAllowanceLimitTwd'> }>(`/api/families/members/${userId}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
+  resetChildPassword: (userId: string, password: string) =>
+    request<{ success: boolean }>(`/api/families/members/${userId}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
 
   removeMember: (userId: string) =>
     request<{ success: boolean }>(`/api/families/members/${userId}`, {
@@ -237,6 +239,8 @@ export const api = {
     request(`/api/admin/users/${id}`, { method: 'DELETE' }),
   updateUserRole: (id: string, role: User['role']) =>
     request<{ user: Pick<User, 'id' | 'role'> }>(`/api/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+  resetUserPassword: (id: string, password: string) =>
+    request<{ success: boolean }>(`/api/admin/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
   updateFamily: (id: string, name: string) =>
     request<{ family: Family }>(`/api/admin/families/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   deleteFamily: (id: string) => request<{ success: boolean }>(`/api/admin/families/${id}`, { method: 'DELETE' }),

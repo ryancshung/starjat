@@ -4,12 +4,11 @@ import jwt from 'jsonwebtoken';
 export type Role = 'ADMIN' | 'PARENT' | 'CHILD';
 
 const defaultJwtSecret = process.env.JWT_SECRET || 'dev-secret';
-const defaultJwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
-
 export interface JwtPayload {
   userId: string;
   email: string;
   role: string;
+  exp?: number;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -26,11 +25,9 @@ export async function comparePassword(
 export function signToken(
   payload: JwtPayload,
   secret = defaultJwtSecret,
-  expiresIn = defaultJwtExpiresIn
+  expiresIn?: jwt.SignOptions['expiresIn']
 ): string {
-  return jwt.sign(payload, secret, {
-    expiresIn: expiresIn as jwt.SignOptions['expiresIn'],
-  });
+  return jwt.sign(payload, secret, expiresIn ? { expiresIn } : {});
 }
 
 export function verifyToken(token: string, secret = defaultJwtSecret): JwtPayload {

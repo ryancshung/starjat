@@ -74,7 +74,6 @@ npx prisma db push
 |------|-----|
 | `DATABASE_URL` | Supabase 的連線字串 |
 | `JWT_SECRET` | 一串很長的隨機字元（可用密碼產生器） |
-| `JWT_EXPIRES_IN` | `7d` |
 | `CORS_ORIGIN` | 先填 `http://localhost:5173`（等 Vercel 好了再改） |
 | `PORT` | `3001`（Railway 也可能自動注入 `PORT`） |
 

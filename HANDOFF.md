@@ -76,7 +76,6 @@ npm run build
    cd backend
    npx wrangler secret put DATABASE_URL
    npx wrangler secret put JWT_SECRET
-   npx wrangler secret put JWT_EXPIRES_IN
    npx wrangler secret put CORS_ORIGIN
    npm run worker:deploy
    ```

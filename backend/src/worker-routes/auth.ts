@@ -17,6 +17,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export function createAuthRoutes(getDb = createPrisma) {
 const auth = new Hono<{ Bindings: WorkerEnv; Variables: WorkerVariables }>();
 
 auth.post('/register', async (c) => {
@@ -24,7 +25,7 @@ auth.post('/register', async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error.errors[0].message }, 400);
 
   const body = parsed.data;
-  const prisma = createPrisma(c.env.DATABASE_URL);
+  const prisma = getDb(c.env.DATABASE_URL);
   try {
     const existing = await prisma.user.findUnique({
       where: { email: body.email.toLowerCase() },
@@ -58,8 +59,7 @@ auth.post('/register', async (c) => {
       {
         token: signToken(
           { userId: user.id, email: user.email, role: user.role },
-          c.env.JWT_SECRET,
-          c.env.JWT_EXPIRES_IN
+          c.env.JWT_SECRET
         ),
         user: { id: user.id, email: user.email, name: user.name, role: user.role, points: user.points },
       },
@@ -77,7 +77,7 @@ auth.post('/login', async (c) => {
   const parsed = loginSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.errors[0].message }, 400);
 
-  const prisma = createPrisma(c.env.DATABASE_URL);
+  const prisma = getDb(c.env.DATABASE_URL);
   try {
     const user = await prisma.user.findUnique({
       where: { email: parsed.data.email.toLowerCase() },
@@ -88,8 +88,7 @@ auth.post('/login', async (c) => {
     return c.json({
       token: signToken(
         { userId: user.id, email: user.email, role: user.role },
-        c.env.JWT_SECRET,
-        c.env.JWT_EXPIRES_IN
+        c.env.JWT_SECRET
       ),
       user: { id: user.id, email: user.email, name: user.name, role: user.role, points: user.points },
     });
@@ -102,7 +101,7 @@ auth.post('/login', async (c) => {
 });
 
 auth.get('/me', authenticate, async (c) => {
-  const prisma = createPrisma(c.env.DATABASE_URL);
+  const prisma = getDb(c.env.DATABASE_URL);
   try {
     const user = await prisma.user.findUnique({
       where: { id: c.get('user').userId },
@@ -111,7 +110,7 @@ auth.get('/me', authenticate, async (c) => {
         memberships: { include: { family: { select: { id: true, name: true, inviteCode: true } } } },
       },
     });
-    return user ? c.json({ user }) : c.json({ error: '使用者不存在' }, 404);
+    return user ? c.json({ user, ...(c.get('user').exp ? { token: signToken({ userId: user.id, email: user.email, role: user.role }, c.env.JWT_SECRET) } : {}) }) : c.json({ error: '使用者不存在' }, 404);
   } catch (error) {
     console.error(error);
     return c.json({ error: '取得使用者資料失敗' }, 500);
@@ -120,4 +119,7 @@ auth.get('/me', authenticate, async (c) => {
   }
 });
 
-export default auth;
+return auth;
+}
+
+export default createAuthRoutes();

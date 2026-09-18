@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from 'hono';
 import { verifyToken } from '../lib/auth';
 import type { WorkerEnv } from '../lib/worker-prisma';
 
-export type AuthUser = { userId: string; email: string; role: string };
+export type AuthUser = { userId: string; email: string; role: string; exp?: number };
 export type WorkerVariables = { user: AuthUser };
 export type WorkerRouteEnv = { Bindings: WorkerEnv; Variables: WorkerVariables };
 

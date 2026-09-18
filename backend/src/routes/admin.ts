@@ -1,5 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { z } from 'zod';
+import { hashPassword } from '../lib/auth';
 import {
   authenticate,
   requireRoles,
@@ -85,5 +87,15 @@ router.delete(
     }
   }
 );
+
+router.put('/users/:id/password', authenticate, requireRoles('ADMIN'), async (req: AuthRequest, res: Response) => {
+  const parsed = z.object({ password: z.string().min(6, '密碼至少 6 個字元').max(128, '密碼最多 128 個字元') }).safeParse(req.body);
+  if (!parsed.success) return void res.status(400).json({ error: parsed.error.errors[0].message });
+  if (req.params.id === req.user!.userId) return void res.status(400).json({ error: '請由其他管理者協助重設密碼' });
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return void res.status(404).json({ error: '使用者不存在' });
+  await prisma.user.update({ where: { id: target.id }, data: { passwordHash: await hashPassword(parsed.data.password) } });
+  res.json({ success: true });
+});
 
 export default router;

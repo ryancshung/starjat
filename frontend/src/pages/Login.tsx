@@ -75,6 +75,8 @@ export default function Login() {
           </button>
         </form>
 
+        <p className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-900">忘記密碼請聯絡家庭中的家長；家長忘記密碼請聯絡系統管理者。</p>
+
         <p className="mt-6 text-center text-sm text-slate-500">
           還沒有帳號？{' '}
           <Link to="/register" className="text-primary font-semibold hover:underline">

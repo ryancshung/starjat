@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Copy, Settings2, ShieldCheck } from 'lucide-react';
 import { api, Family } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import PasswordResetDialog from '../components/PasswordResetDialog';
 
 const warning = '扣除星星可能讓孩子感到挫折。請確認每次扣除符合事前約定，並填寫孩子能理解的明確原因。扣星原因、時間與執行者都會永久保留，孩子也可以查看。';
 
@@ -49,11 +50,14 @@ export default function FamilyPage() {
   const { data, isLoading } = useQuery({ queryKey: ['family'], queryFn: api.getMyFamily });
   const family = data?.family;
   const isOwner = family?.ownerId === user?.id;
+  const canResetChildren = user?.role === 'PARENT' || user?.role === 'ADMIN';
   const [copied, setCopied] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState('');
   const [timezone, setTimezone] = useState('Asia/Taipei');
   const [ratio, setRatio] = useState('');
+  const [passwordTarget, setPasswordTarget] = useState<{ id: string; name: string } | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState('');
   useEffect(() => { if (family) { setTimezone(family.timezone || 'Asia/Taipei'); setRatio(family.pointsPerTwd?.toString() ?? ''); } }, [family]);
 
   if (isLoading) return <p className="text-slate-500" role="status">載入中...</p>;
@@ -74,11 +78,11 @@ export default function FamilyPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5" aria-labelledby="family-settings-title">
           <div className="mb-4 flex items-center gap-2"><Settings2 className="text-primary" size={20} /><h2 id="family-settings-title" className="font-extrabold">家庭設定</h2></div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-bold text-slate-700">家庭時區
-              <input list="timezones" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-normal" />
+            <label className="min-w-0 text-sm font-bold text-slate-700">家庭時區
+              <input list="timezones" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="mt-1 min-w-0 w-full rounded-xl border border-slate-200 px-3 py-2 font-normal" />
               <datalist id="timezones"><option value="Asia/Taipei" /><option value="Asia/Tokyo" /><option value="America/Los_Angeles" /><option value="Europe/London" /></datalist>
             </label>
-            <label className="text-sm font-bold text-slate-700">零用錢比例
+            <label className="min-w-0 text-sm font-bold text-slate-700">零用錢比例
               <div className="mt-1 flex items-center gap-2"><input type="number" min={1} value={ratio} onChange={(event) => setRatio(event.target.value)} placeholder="未啟用" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 font-normal" /><span className="whitespace-nowrap text-sm text-slate-500">星 = NT$1</span></div>
             </label>
           </div>
@@ -98,7 +102,7 @@ export default function FamilyPage() {
         <div className="space-y-3">
           {family.members.map((member) => (
             <article key={member.user.id} className="rounded-2xl border border-slate-100 bg-white p-4">
-              <div className="flex items-center justify-between gap-4"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 font-bold text-primary">{member.user.name[0]}</div><div><div className="font-bold text-slate-800">{member.user.name}{member.user.id === user?.id && <span className="ml-1 text-xs font-normal text-slate-400">（你）</span>}</div><div className="text-xs text-slate-500">{member.user.id === family.ownerId ? '家庭管理者' : member.user.role === 'CHILD' ? '孩子' : '家長'} · ⭐ {member.user.points}</div></div></div>{isOwner && member.user.id !== user?.id && <button type="button" onClick={async () => { if (!window.confirm(`確定要移除 ${member.user.name} 嗎？`)) return; await api.removeMember(member.user.id); qc.invalidateQueries({ queryKey: ['family'] }); }} className="text-xs font-bold text-red-600">移除</button>}</div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 font-bold text-primary">{member.user.name[0]}</div><div><div className="font-bold text-slate-800">{member.user.name}{member.user.id === user?.id && <span className="ml-1 text-xs font-normal text-slate-400">（你）</span>}</div><div className="text-xs text-slate-500">{member.user.id === family.ownerId ? '家庭管理者' : member.user.role === 'CHILD' ? '孩子' : '家長'} · ⭐ {member.user.points}</div></div></div><div className="flex flex-wrap gap-3 self-start text-xs font-bold sm:self-auto">{canResetChildren&&member.user.role==='CHILD'&&<button type="button" onClick={()=>{setPasswordTarget({id:member.user.id,name:member.user.name});setPasswordMessage('');}} className="min-h-11 text-primary">重設密碼</button>}{isOwner && member.user.id !== user?.id && <button type="button" onClick={async () => { if (!window.confirm(`確定要移除 ${member.user.name} 嗎？`)) return; await api.removeMember(member.user.id); qc.invalidateQueries({ queryKey: ['family'] }); }} className="min-h-11 text-red-600">移除</button>}</div></div>
               {isOwner && <MemberSettings family={family} member={member} isOwner={isOwner} />}
             </article>
           ))}
@@ -106,6 +110,8 @@ export default function FamilyPage() {
       </section>
 
       {isOwner && <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mt-0.5 shrink-0" size={18} /><p>扣星權限只決定家長是否能開始操作；每一次扣星仍會強制顯示警語與確認內容。</p></div>}
+      <p role="status" className="text-sm text-emerald-700">{passwordMessage}</p>
+      {passwordTarget&&<PasswordResetDialog targetName={passwordTarget.name} onClose={()=>setPasswordTarget(null)} onSubmit={async password=>{await api.resetChildPassword(passwordTarget.id,password);setPasswordMessage(`已重設 ${passwordTarget.name} 的密碼。`);}} />}
     </div>
   );
 }

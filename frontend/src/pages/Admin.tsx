@@ -2,10 +2,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Navigate } from 'react-router-dom';
+import { useState } from 'react';
+import PasswordResetDialog from '../components/PasswordResetDialog';
 
 export default function Admin() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const [passwordTarget, setPasswordTarget] = useState<{ id:string; name:string } | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState('');
 
   if (user?.role !== 'ADMIN') {
     return <Navigate to="/app" replace />;
@@ -43,7 +47,8 @@ export default function Admin() {
                 </span>
               </div>
               {u.id !== user.id && (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={()=>{setPasswordTarget({id:u.id,name:u.name});setPasswordMessage('');}} className="min-h-11 text-xs font-bold text-primary hover:underline">重設密碼</button>
                   <select
                     value={u.role}
                     onChange={async (e) => {
@@ -69,6 +74,8 @@ export default function Admin() {
           ))}
         </div>
       </section>
+      <p role="status" className="text-sm text-emerald-700">{passwordMessage}</p>
+      {passwordTarget&&<PasswordResetDialog targetName={passwordTarget.name} onClose={()=>setPasswordTarget(null)} onSubmit={async password=>{await api.resetUserPassword(passwordTarget.id,password);setPasswordMessage(`已重設 ${passwordTarget.name} 的密碼。`);}} />}
 
       <section>
         <h2 className="font-bold text-slate-700 mb-3">

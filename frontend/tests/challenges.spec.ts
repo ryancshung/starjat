@@ -2,7 +2,7 @@ import { test,expect,Page } from '@playwright/test';
 const task={id:'a',title:'閱讀 20 分鐘',description:'讀完今天的故事',points:5,isRecurring:true,recurringType:'daily',keepAfterCompletion:true,maxCompletions:null,completions:[],myStatus:'READY'};
 const award={id:'award',challengeId:'challenge',userId:'child',user:{id:'child',name:'小星'},localDate:'2026-09-07',title:'每日閱讀',bonusStars:0,customTitle:'玩電動 30 分鐘',customDescription:'晚餐後一起玩',earnedAt:'2026-09-07T04:00:00Z',fulfilledAt:null};
 async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boolean}={}) {
-  let status='READY',submits=0,fulfills=0,fulfilled=false,challengeDeletes=0,taskDeletes=0,redemptionDeletes=0,wishDeletes=0;
+  let status='READY',submits=0,fulfills=0,fulfilled=false,challengeDeletes=0,taskDeletes=0,redemptionDeletes=0,wishDeletes=0,childPassword='',adminPassword='';
   let showChallenge=true,showRejectedTask=true,showRejectedRedemption=true,showRejectedWish=true;
   const saved:any[]=[];
   await page.addInitScript(()=>localStorage.setItem('token','test-token'));
@@ -27,6 +27,10 @@ async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boo
     else if(path==='/api/rewards/redemptions/rejected-redemption'&&route.request().method()==='DELETE'){redemptionDeletes++;showRejectedRedemption=false;json={success:true};}
     else if(path==='/api/rewards/wishes/rejected-wish'&&route.request().method()==='DELETE'){wishDeletes++;showRejectedWish=false;json={success:true};}
     else if(path==='/api/rewards/wishes')json={wishes:showRejectedWish?[{id:'rejected-wish',title:'腳踏車',status:'REJECTED',user:{id:'child',name:'小星'}}]:[]};
+    else if(path==='/api/families/members/child/password'&&route.request().method()==='PUT'){childPassword=route.request().postDataJSON().password;json={success:true};}
+    else if(path==='/api/admin/users/child/password'&&route.request().method()==='PUT'){adminPassword=route.request().postDataJSON().password;json={success:true};}
+    else if(path==='/api/admin/users')json={users:[{id:'parent',name:'管理者',email:'parent@test.invalid',role:'ADMIN',points:0},{id:'child',name:'小星',email:'child@test.invalid',role:'CHILD',points:10}]};
+    else if(path==='/api/admin/families')json={families:[]};
     else if(path==='/api/families/me')json={family:{id:'family',name:'測試家庭',inviteCode:'TEST',ownerId:role==='CHILD'?'parent':'parent',members:[{user:{id:'child',name:'小星',role:'CHILD',points:10}}]}};
     else if(path.includes('/tasks/groups'))json={groups:[]};
     else if(path.includes('/rewards'))json={rewards:[],redemptions:[],wishes:[]};
@@ -39,7 +43,7 @@ async function mock(page:Page,role='CHILD',options:{lost?:boolean;longNames?:boo
     }
     await route.fulfill({json});
   });
-  return {submits:()=>submits,fulfills:()=>fulfills,challengeDeletes:()=>challengeDeletes,taskDeletes:()=>taskDeletes,redemptionDeletes:()=>redemptionDeletes,wishDeletes:()=>wishDeletes,saved};
+  return {submits:()=>submits,fulfills:()=>fulfills,challengeDeletes:()=>challengeDeletes,taskDeletes:()=>taskDeletes,redemptionDeletes:()=>redemptionDeletes,wishDeletes:()=>wishDeletes,childPassword:()=>childPassword,adminPassword:()=>adminPassword,saved};
 }
 test('mobile submission gives immediate feedback, rejects rapid clicks, survives reload',async({page})=>{
   await page.setViewportSize({width:360,height:800});const state=await mock(page);
@@ -115,4 +119,32 @@ test('parent report with long child name stays within mobile viewport',async({pa
   await page.goto('/app/reports');await expect(page.getByText('release-smoke-', {exact:false}).first()).toBeAttached();
   await expect(page.getByText('玩電動 30 分鐘',{exact:false})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('parent and admin password reset dialogs validate and work on mobile with large text',async({page})=>{
+  test.setTimeout(60000);await page.setViewportSize({width:360,height:800});const state=await mock(page,'ADMIN');
+  await page.goto('/app/family');await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+  await page.getByRole('button',{name:'重設密碼'}).click();
+  await page.getByLabel('新密碼',{exact:true}).fill('new-child-password');await page.getByLabel('再次輸入新密碼').fill('different');await page.getByRole('button',{name:'確認重設'}).click();
+  await expect(page.getByRole('alert')).toContainText('不一致');
+  await page.getByLabel('再次輸入新密碼').fill('new-child-password');await page.getByRole('button',{name:'確認重設'}).click();
+  await expect(page.getByRole('status')).toContainText('已重設 小星');expect(state.childPassword()).toBe('new-child-password');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+
+  await page.goto('/app/admin');await page.getByRole('button',{name:'重設密碼'}).click();
+  await page.getByLabel('新密碼',{exact:true}).fill('admin-set-password');await page.getByLabel('再次輸入新密碼').fill('admin-set-password');await page.getByRole('button',{name:'確認重設'}).click();
+  expect(state.adminPassword()).toBe('admin-set-password');
+});
+
+test('cached login survives auth refresh failure and only manual logout clears it',async({page})=>{
+  const cached={id:'parent',name:'離線家長',email:'parent@test.invalid',role:'PARENT',points:0};
+  await page.addInitScript(user=>{localStorage.setItem('token','permanent-token');localStorage.setItem('auth-user',JSON.stringify(user));},cached);
+  await page.route('**/api/**',async route=>{if(new URL(route.request().url()).pathname==='/api/auth/me'){await route.abort('failed');return;}await route.fulfill({json:{family:{id:'family',name:'測試家庭',inviteCode:'TEST',ownerId:'parent',members:[]},completions:[],redemptions:[],requests:[]}});});
+  await page.goto('/app');await expect(page.getByRole('heading',{name:'測試家庭'})).toBeVisible();
+  await page.getByTitle('登出').click();await expect(page).toHaveURL('/');
+  expect(await page.evaluate(()=>({token:localStorage.getItem('token'),user:localStorage.getItem('auth-user')}))).toEqual({token:null,user:null});
+});
+
+test('login explains how to recover a forgotten password',async({page})=>{
+  await page.goto('/login');await expect(page.getByText('忘記密碼請聯絡家庭中的家長；家長忘記密碼請聯絡系統管理者。')).toBeVisible();
 });

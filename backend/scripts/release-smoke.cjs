@@ -37,6 +37,16 @@ async function main(){
   const register=async(role,inviteCode)=>{const u=await request('/api/auth/register','POST',{name:state.marker+'-'+role,email:`${role}-${state.marker}@example.invalid`,password:crypto.randomBytes(24).toString('hex'),role,inviteCode});state.users.push(u);save();return u;};
   const parent=await register('PARENT');state.family=(await request('/api/families','POST',{name:state.marker},parent.token)).family;save();
   const child=await register('CHILD',state.family.inviteCode);
+  assert.equal(JSON.parse(Buffer.from(child.token.split('.')[1],'base64url').toString()).exp,undefined);
+  const childPassword=`reset-${crypto.randomBytes(16).toString('hex')}`;
+  await request(`/api/families/members/${child.user.id}/password`,'PUT',{password:childPassword},parent.token);
+  const childAfterReset=await request('/api/auth/login','POST',{email:child.user.email,password:childPassword});
+  assert.equal(childAfterReset.user.id,child.user.id);
+  assert.equal((await request('/api/auth/me','GET',undefined,child.token)).user.id,child.user.id);
+  const managedParent=await register('PARENT');
+  const managedPassword=`admin-${crypto.randomBytes(16).toString('hex')}`;
+  await request(`/api/admin/users/${managedParent.user.id}/password`,'PUT',{password:managedPassword},parent.token);
+  assert.equal((await request('/api/auth/login','POST',{email:managedParent.user.email,password:managedPassword})).user.id,managedParent.user.id);
   const tasks=[];for(const [i,points]of [5,0,5].entries())tasks.push((await request('/api/tasks','POST',{title:`Smoke ${['A','B','C'][i]}`,points,isRecurring:true,recurringType:'daily'},parent.token)).task);
   await request('/api/tasks/challenges','POST',{title:'Smoke daily combo',taskIds:tasks.map(t=>t.id),childIds:[child.user.id],bonusStars:10,customTitle:'Smoke custom reward',customDescription:'Temporary deployment verification',isActive:true},parent.token);
   const duplicates=await Promise.all(Array.from({length:4},(_,i)=>request(`/api/tasks/${tasks[0].id}/complete`,'POST',{requestId:`smoke-repeat-${i}`},child.token)));
@@ -53,6 +63,6 @@ async function main(){
   await request(`/api/reports/monthly?userId=${parent.user.id}`,'GET',undefined,child.token,403);
   const retry=await request(`/api/tasks/${tasks[0].id}/complete`,'POST',{requestId:'smoke-repeat-3'},child.token);assert.equal(retry.completion.id,completions[0].id);
   const counts=await sql.query('SELECT count(*)::int AS n FROM "TaskCompletion" WHERE "userId"=$1',[child.user.id]);assert.equal(counts[0].n,3);
-  state.verified=true;save();console.log(JSON.stringify({passed:true,concurrentSubmissions:4,uniqueCompletions:3,concurrentApprovals:3,points:20,awards:1,fulfillmentIdempotent:true,childReportRestricted:true}));
+  state.verified=true;save();console.log(JSON.stringify({passed:true,permanentLogin:true,parentPasswordReset:true,adminPasswordReset:true,existingSessionPreserved:true,concurrentSubmissions:4,uniqueCompletions:3,concurrentApprovals:3,points:20,awards:1,fulfillmentIdempotent:true,childReportRestricted:true}));
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1;});

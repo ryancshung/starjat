@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { generateInviteCode } from '../lib/auth';
+import { generateInviteCode, hashPassword } from '../lib/auth';
 import { isValidTimezone } from '../lib/family-time';
 import { authenticate, requireRoles, type AuthRequest } from '../middleware/auth';
 
@@ -60,6 +60,17 @@ router.put('/members/:userId/settings', authenticate, requireRoles('PARENT', 'AD
   const target = await prisma.familyMember.findFirst({ where: { familyId: mine.familyId, userId: req.params.userId } });
   if (!target) return void res.status(404).json({ error: '成員不存在' });
   res.json({ membership: await prisma.familyMember.update({ where: { id: target.id }, data: parsed.data }) });
+});
+
+router.put('/members/:userId/password', authenticate, requireRoles('PARENT', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  const parsed = z.object({ password: z.string().min(6, '密碼至少 6 個字元').max(128, '密碼最多 128 個字元') }).safeParse(req.body);
+  if (!parsed.success) return void res.status(400).json({ error: parsed.error.errors[0].message });
+  const mine = await prisma.familyMember.findFirst({ where: { userId: req.user!.userId } });
+  const target = mine ? await prisma.familyMember.findFirst({ where: { familyId: mine.familyId, userId: req.params.userId }, include: { user: true } }) : null;
+  if (!mine || !target) return void res.status(404).json({ error: '找不到同家庭的孩子' });
+  if (target.user.role !== 'CHILD') return void res.status(403).json({ error: '家長只能重設孩子的密碼' });
+  await prisma.user.update({ where: { id: target.userId }, data: { passwordHash: await hashPassword(parsed.data.password) } });
+  res.json({ success: true });
 });
 
 router.delete('/members/:userId', authenticate, requireRoles('PARENT', 'ADMIN'), async (req: AuthRequest, res: Response) => {
