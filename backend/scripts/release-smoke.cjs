@@ -34,7 +34,7 @@ async function main(){
   if(process.argv[2]==='cleanup')return cleanup();
   if(fs.existsSync(file))throw Error('Prior smoke fixture exists; clean it up first');
   save();
-  const register=async(role,inviteCode)=>{const u=await request('/api/auth/register','POST',{name:state.marker+'-'+role,email:`${role}-${state.marker}@example.invalid`,password:crypto.randomBytes(24).toString('hex'),role,inviteCode});state.users.push(u);save();return u;};
+  const register=async(role,inviteCode,label=role)=>{const password=crypto.randomBytes(24).toString('hex');const u=await request('/api/auth/register','POST',{name:state.marker+'-'+label,email:`${label}-${state.marker}@example.invalid`,password,role,inviteCode});const fixture={...u,password};state.users.push(fixture);save();return fixture;};
   const parent=await register('PARENT');state.family=(await request('/api/families','POST',{name:state.marker},parent.token)).family;save();
   const child=await register('CHILD',state.family.inviteCode);
   assert.equal(JSON.parse(Buffer.from(child.token.split('.')[1],'base64url').toString()).exp,undefined);
@@ -43,9 +43,13 @@ async function main(){
   const childAfterReset=await request('/api/auth/login','POST',{email:child.user.email,password:childPassword});
   assert.equal(childAfterReset.user.id,child.user.id);
   assert.equal((await request('/api/auth/me','GET',undefined,child.token)).user.id,child.user.id);
-  const managedParent=await register('PARENT');
+  const managedParent=await register('PARENT',undefined,'MANAGED_PARENT');
+  const smokeAdmin=await register('PARENT',undefined,'SMOKE_ADMIN');
+  await sql.query('UPDATE "User" SET role=$1 WHERE id=$2',['ADMIN',smokeAdmin.user.id]);
+  const adminSession=await request('/api/auth/login','POST',{email:smokeAdmin.user.email,password:smokeAdmin.password});
+  assert.equal(adminSession.user.role,'ADMIN');
   const managedPassword=`admin-${crypto.randomBytes(16).toString('hex')}`;
-  await request(`/api/admin/users/${managedParent.user.id}/password`,'PUT',{password:managedPassword},parent.token);
+  await request(`/api/admin/users/${managedParent.user.id}/password`,'PUT',{password:managedPassword},adminSession.token);
   assert.equal((await request('/api/auth/login','POST',{email:managedParent.user.email,password:managedPassword})).user.id,managedParent.user.id);
   const tasks=[];for(const [i,points]of [5,0,5].entries())tasks.push((await request('/api/tasks','POST',{title:`Smoke ${['A','B','C'][i]}`,points,isRecurring:true,recurringType:'daily'},parent.token)).task);
   await request('/api/tasks/challenges','POST',{title:'Smoke daily combo',taskIds:tasks.map(t=>t.id),childIds:[child.user.id],bonusStars:10,customTitle:'Smoke custom reward',customDescription:'Temporary deployment verification',isActive:true},parent.token);
