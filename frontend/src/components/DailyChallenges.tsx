@@ -10,7 +10,7 @@ export function ChallengeAwards() {
   const {user}=useAuth();
   const parent=user?.role==='PARENT'||user?.role==='ADMIN';
   const qc=useQueryClient();
-  const {data,error}=useQuery({queryKey:['challenges',user?.id],queryFn:api.getChallenges});
+  const {data,error,isFetching,refetch}=useQuery({queryKey:['challenges',user?.id],queryFn:api.getChallenges,retry:false});
   const [busy,setBusy]=useState<string|null>(null);
   const lock=useRef(false);
   const [message,setMessage]=useState('');
@@ -23,7 +23,8 @@ export function ChallengeAwards() {
   };
   return <section className="space-y-3" aria-label="挑戰獎勵"><h2 className="text-lg font-extrabold">挑戰獎勵</h2><p className="text-sm text-slate-600">完成挑戰獲得的自訂項目，不扣星、不過期；家長提供後標記兌現。</p>
     <p role="status" className="text-sm text-slate-700">{message}</p>
-    {error?<p role="alert">獎勵載入失敗，請重新整理。</p>:!data?<p role="status">載入中…</p>:!awards.length?<p className="text-sm text-slate-500">尚未獲得自訂挑戰獎勵。</p>:awards.map(a=><article key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"><div className="min-w-0 break-words"><h3 className="font-bold">{a.customTitle}</h3>{a.customDescription&&<p className="whitespace-pre-wrap text-sm text-slate-600">{a.customDescription}</p>}<p className="text-xs text-slate-500">{parent&&`${a.user?.name} · `}{a.localDate} · {a.title}</p><p className="mt-1 text-sm font-bold">{a.fulfilledAt?'已兌現':'已獲得 · 待兌現'}</p></div>{parent&&!a.fulfilledAt&&<button type="button" disabled={busy!==null} onClick={()=>fulfill(a.id)} className={`${button} bg-primary-700 text-white`}>{busy===a.id?'處理中…':'標記已兌現'}</button>}</article>)}
+    {error&&<div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-red-700"><span>{data?'獎勵更新失敗，目前顯示上次載入的資料。':'獎勵載入失敗。'}</span><button type="button" disabled={isFetching} onClick={()=>refetch()} className="font-bold underline">{isFetching?'重試中…':'重試'}</button></div>}
+    {!data?!error&&<p role="status">載入中…</p>:!awards.length?<p className="text-sm text-slate-500">尚未獲得自訂挑戰獎勵。</p>:awards.map(a=><article key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"><div className="min-w-0 break-words"><h3 className="font-bold">{a.customTitle}</h3>{a.customDescription&&<p className="whitespace-pre-wrap text-sm text-slate-600">{a.customDescription}</p>}<p className="text-xs text-slate-500">{parent&&`${a.user?.name} · `}{a.localDate} · {a.title}</p><p className="mt-1 text-sm font-bold">{a.fulfilledAt?'已兌現':'已獲得 · 待兌現'}</p></div>{parent&&!a.fulfilledAt&&<button type="button" disabled={busy!==null} onClick={()=>fulfill(a.id)} className={`${button} bg-primary-700 text-white`}>{busy===a.id?'處理中…':'標記已兌現'}</button>}</article>)}
   </section>;
 }
 
@@ -31,7 +32,7 @@ export default function DailyChallenges({tasks}:{tasks:Task[]}) {
   const {user}=useAuth();
   const parent=user?.role==='PARENT'||user?.role==='ADMIN';
   const qc=useQueryClient();
-  const {data,error}=useQuery({queryKey:['challenges',user?.id],queryFn:api.getChallenges,refetchInterval:30000});
+  const {data,error,isFetching,refetch}=useQuery({queryKey:['challenges',user?.id],queryFn:api.getChallenges,refetchInterval:30000,retry:false});
   const [open,setOpen]=useState(false);
   const [editing,setEditing]=useState<string>();
   const [form,setForm]=useState<ChallengeInput>(empty);
@@ -69,7 +70,8 @@ export default function DailyChallenges({tasks}:{tasks:Task[]}) {
       {editing&&<label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e=>setForm(f=>({...f,isActive:e.target.checked}))}/>啟用挑戰</label>}
       <div className="flex gap-2"><button type="button" disabled={busy} onClick={()=>setOpen(false)} className={`${button} bg-slate-100`}>取消</button><button disabled={busy} className={`${button} bg-primary-700 text-white`}>{busy?'儲存中…':'儲存挑戰'}</button></div>
     </form>}
-    {error?<p role="alert">挑戰載入失敗，請重新整理。</p>:!data?<p role="status">載入中…</p>:<>
+    {error&&<div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-red-700"><span>{data?'挑戰更新失敗，目前顯示上次載入的資料。':'挑戰載入失敗。'}</span><button type="button" disabled={isFetching} onClick={()=>refetch()} className="font-bold underline">{isFetching?'重試中…':'重試'}</button></div>}
+    {!data?!error&&<p role="status">載入中…</p>:<>
       {parent&&data.settings.length>0&&<details className="print:hidden"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold">管理挑戰設定（{data.settings.length}）</summary>{data.settings.map(c=><div key={c.id} className="flex flex-col gap-2 border-b border-slate-200 py-3 sm:flex-row sm:items-center sm:justify-between"><span className="break-words text-sm">{c.title} · {c.isActive?'啟用':'停用'} · {c.effectiveDate} 起</span><div className="flex flex-wrap gap-2"><button type="button" disabled={busy} className={`${button} text-primary-700`} onClick={()=>{setEditing(c.id);setForm(c);setKind(c.customTitle?(c.bonusStars?'both':'custom'):'stars');setOpen(true);setMessage('');}}>編輯 {c.title}</button>{c.isActive&&<button type="button" disabled={busy} className={`${button} text-red-700`} onClick={()=>remove(c.id,c.title)}>{busy?'處理中…':`刪除 ${c.title}`}</button>}</div></div>)}</details>}
       {!data.progress.length&&<p className="text-sm text-slate-500">今天尚無適用的每日挑戰。</p>}
       {data.progress.map(c=><article key={`${c.id}-${c.user.id}`} className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 className="break-words font-bold">{parent&&`${c.user.name} · `}{c.title}</h3><p className="text-sm font-bold">已核准 {c.tasks.filter(t=>t.status==='APPROVED').length}／{c.tasks.length} · {c.bonusStars>0&&`額外 ⭐ ${c.bonusStars} `}{c.customTitle}</p>{c.customDescription&&<p className="whitespace-pre-wrap text-sm text-slate-600">{c.customDescription}</p>}<ul className="space-y-1 text-sm">{c.tasks.map(t=><li key={t.id}>{t.status==='APPROVED'?'✓ 已核准':t.status==='PENDING'?'等待審核':'尚未完成'} · {t.title}</li>)}</ul>{c.award&&<p className="text-sm font-bold text-emerald-800">{c.bonusStars>0?'加碼星星已入帳。 ':''}{c.customTitle?(c.award.fulfilledAt?'自訂獎勵已兌現。':'自訂獎勵已獲得，可到「獎勵」查看。'):'今日挑戰已達成！'}</p>}</article>)}

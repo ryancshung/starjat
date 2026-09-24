@@ -10,10 +10,11 @@ export default function Tasks() {
   const qc = useQueryClient();
   const isParent = user?.role === 'PARENT' || user?.role === 'ADMIN';
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['tasks', user?.id],
     queryFn: api.getTasks,
     refetchInterval: 30000,
+    retry: false,
   });
 
   const [open, setOpen] = useState(false);
@@ -36,7 +37,8 @@ export default function Tasks() {
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState('all');
-  const { data: groupsData } = useQuery({ queryKey: ['taskGroups',user?.id], queryFn: api.getTaskGroups });
+  const groupsQuery = useQuery({ queryKey: ['taskGroups',user?.id], queryFn: api.getTaskGroups, retry:false });
+  const groupsData = groupsQuery.data;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,12 +153,14 @@ export default function Tasks() {
         )}
       </div>
 
-      {error ? <p role="alert">任務載入失敗，請重新整理。</p> : isLoading ? (
+      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700"><span>{data?'任務更新失敗，目前顯示上次載入的資料。':'任務載入失敗，請稍後重試。'}</span><button type="button" disabled={isFetching} onClick={()=>refetch()} className="min-h-10 rounded-lg bg-white px-3 font-bold disabled:opacity-50">{isFetching?'重試中…':'重試'}</button></div>}
+      {isLoading && !data ? (
         <p className="text-slate-400">載入中...</p>
-      ) : !data?.tasks?.length ? (
+      ) : data && !data.tasks.length ? (
         <p className="text-slate-400">目前沒有任務</p>
-      ) : (
+      ) : data ? (
         <>
+        {groupsQuery.error&&<div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-700"><span>任務群組暫時無法更新。</span><button type="button" disabled={groupsQuery.isFetching} onClick={()=>groupsQuery.refetch()} className="font-bold underline">{groupsQuery.isFetching?'重試中…':'重試'}</button></div>}
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setGroupFilter('all')} className={`px-3 py-1 rounded-full text-sm ${groupFilter==='all'?'bg-primary text-white':'bg-white text-slate-600'}`}>全部</button>
           {groupsData?.groups.map((g)=><button key={g.id} onClick={()=>setGroupFilter(g.id)} className={`px-3 py-1 rounded-full text-sm ${groupFilter===g.id?'bg-primary text-white':'bg-white text-slate-600'}`}>{g.name}</button>)}
@@ -203,7 +207,7 @@ export default function Tasks() {
           ))}
         </div>
         </>
-      )}
+      ):null}
 
       {open && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">

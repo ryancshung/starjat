@@ -88,7 +88,9 @@ export async function taskRequest(db: PrismaClient, actor: Actor, method: string
     const membership = await tx.familyMember.findFirst({where:{userId:actor.userId},include:{family:true}});
     if (!membership) throw new TaskError('請先建立或加入家庭',403);
     const familyId = membership.familyId;
-    await tx.$queryRaw`SELECT "id" FROM "Family" WHERE "id" = ${familyId} FOR UPDATE`;
+    // Reads may run together. Mutations still serialize on the family row so
+    // submissions, approvals, settings and awards see the latest committed state.
+    if (method !== 'GET') await tx.$queryRaw`SELECT "id" FROM "Family" WHERE "id" = ${familyId} FOR UPDATE`;
     const date = localParts(now,membership.family.timezone).date;
     const parent = actor.role === 'PARENT' || actor.role === 'ADMIN';
     const requireParent = () => { if (!parent) throw new TaskError('權限不足',403); };
@@ -160,9 +162,9 @@ export async function taskRequest(db: PrismaClient, actor: Actor, method: string
       return {group:await tx.taskGroup.update({where:{id:group.id},data:{name}})};
     }
     if (method==='GET' && !id) {
-      const view=await dayView(tx,familyId,actor.userId,date);
-      const current=await configuredTasks(tx,familyId,date);
-      const tasks=parent?current:view.tasks;
+      const tasks=parent
+        ? await configuredTasks(tx,familyId,date)
+        : (await dayView(tx,familyId,actor.userId,date)).tasks;
       const pending=await tx.taskCompletion.findMany({where:{task:{familyId},status:'PENDING'},include:{user:{select:{id:true,name:true}}}});
       const approved=await tx.taskCompletion.findMany({where:{userId:actor.userId,status:'APPROVED',localDate:date}});
       // Include legacy approvals from today without changing their historical rows.

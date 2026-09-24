@@ -12,17 +12,17 @@ export function setToken(token: string | null) {
 export async function request<T>(
   path: string,
   options: RequestInit = {},
-  policy: { timeoutMs?: number; retryTransientOnce?: boolean } = {}
+  policy: { timeoutMs?: number; retryTransientOnce?: boolean; retryDelayMs?: number } = {}
 ): Promise<T> {
   const token = getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
+  const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const timeoutMs = policy.timeoutMs ?? 20000;
   const attempts = policy.retryTransientOnce ? 2 : 1;
+  const retryDelayMs = policy.retryDelayMs ?? 250;
+  const waitBeforeRetry = () => new Promise(resolve => window.setTimeout(resolve, retryDelayMs));
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
@@ -40,8 +40,13 @@ export async function request<T>(
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // HTTP responses are definitive. In particular, never retry auth,
-        // authorization, or rate-limit responses.
+        const retryableServerError = res.status === 408 || res.status >= 500;
+        if (policy.retryTransientOnce && retryableServerError && attempt + 1 < attempts) {
+          await waitBeforeRetry();
+          continue;
+        }
+        // Authentication, authorization, validation and rate-limit responses
+        // are definitive and must not be retried automatically.
         throw new Error(data.error || `請求失敗 (${res.status})`);
       }
       return data as T;
@@ -50,7 +55,10 @@ export async function request<T>(
       const isAbort = error instanceof DOMException && error.name === 'AbortError';
       const isNetworkError = error instanceof TypeError;
       const isTransient = !externallyAborted && (timedOut || isAbort || isNetworkError);
-      if (isTransient && attempt + 1 < attempts) continue;
+      if (isTransient && attempt + 1 < attempts) {
+        await waitBeforeRetry();
+        continue;
+      }
       if (timedOut || (isAbort && !externallyAborted)) {
         throw new Error('伺服器回應時間較長，請稍候後再試。');
       }
@@ -67,6 +75,7 @@ export async function request<T>(
 }
 
 const authRequestPolicy = { timeoutMs: 55000, retryTransientOnce: true } as const;
+const taskReadPolicy = { timeoutMs: 30000, retryTransientOnce: true, retryDelayMs: 750 } as const;
 
 export const api = {
   // Auth
@@ -149,8 +158,8 @@ export const api = {
   deleteScheduledAward: (id:string) => request<{ success:boolean }>(`/api/scheduled-awards/${id}`, { method:'DELETE' }),
 
   // Tasks
-  getTasks: () => request<{ tasks: Task[]; localDate: string }>('/api/tasks'),
-  getChallenges: () => request<ChallengeData>('/api/tasks/challenges'),
+  getTasks: () => request<{ tasks: Task[]; localDate: string }>('/api/tasks', {}, taskReadPolicy),
+  getChallenges: () => request<ChallengeData>('/api/tasks/challenges', {}, taskReadPolicy),
   saveChallenge: (data: ChallengeInput, id?: string) => request(`/api/tasks/challenges${id ? `/${id}` : ''}`, { method:id?'PUT':'POST', body:JSON.stringify(data) }),
   deleteChallenge: (id: string) => request<{ success:boolean; archived:boolean; effectiveDate:string }>(`/api/tasks/challenges/${id}`, { method:'DELETE' }),
   fulfillChallengeAward: (id: string) => request(`/api/tasks/challenge-awards/${id}/fulfill`, { method:'PUT', body:'{}' }),
@@ -176,7 +185,7 @@ export const api = {
   deleteTask: (id: string) =>
     request<{ success: boolean; archived: boolean }>(`/api/tasks/${id}`, { method: 'DELETE' }),
   reorderTasks: (ids: string[]) => request<{ success: boolean }>('/api/tasks/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
-  getTaskGroups: () => request<{ groups: TaskGroup[] }>('/api/tasks/groups'),
+  getTaskGroups: () => request<{ groups: TaskGroup[] }>('/api/tasks/groups', {}, taskReadPolicy),
   createTaskGroup: (name: string) => request<{ group: TaskGroup }>('/api/tasks/groups', { method: 'POST', body: JSON.stringify({ name }) }),
   updateTaskGroup: (id: string, name: string) => request<{ group: TaskGroup }>(`/api/tasks/groups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   deleteTaskGroup: (id: string) => request<{ success: boolean }>(`/api/tasks/groups/${id}`, { method: 'DELETE' }),

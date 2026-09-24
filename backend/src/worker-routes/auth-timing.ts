@@ -24,9 +24,17 @@ export function createAuthTiming(route: AuthTimingRoute) {
 }
 
 export function safeAuthError(error: unknown) {
-  const value = error as { name?: unknown; code?: unknown };
+  const value = error as { name?: unknown; code?: unknown; message?: unknown; type?: unknown };
+  const message = typeof value?.message === 'string'
+    ? value.message
+        .replace(/\b(?:postgres(?:ql)?|wss?):\/\/\S+/gi, '[redacted-url]')
+        .replace(/\b(?:password|token|authorization)=\S+/gi, '$1=[redacted]')
+        .slice(0, 240)
+    : undefined;
   return {
     errorName: typeof value?.name === 'string' ? value.name : 'UnknownError',
     ...(typeof value?.code === 'string' ? { errorCode: value.code } : {}),
+    ...(typeof value?.type === 'string' ? { errorType: value.type } : {}),
+    ...(message ? { errorMessage: message } : {}),
   };
 }
