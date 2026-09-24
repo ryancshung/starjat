@@ -9,9 +9,10 @@ export function setToken(token: string | null) {
   else localStorage.removeItem('token');
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  policy: { timeoutMs?: number; retryTransientOnce?: boolean } = {}
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -20,22 +21,52 @@ async function request<T>(
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 20000);
-  try {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-    signal: options.signal ?? controller.signal,
-  });
+  const timeoutMs = policy.timeoutMs ?? 20000;
+  const attempts = policy.retryTransientOnce ? 2 : 1;
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || `請求失敗 (${res.status})`);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    try {
+      const res = await fetch(`${API_URL}${path}`, {
+        ...options,
+        headers,
+        signal: options.signal ?? controller.signal,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // HTTP responses are definitive. In particular, never retry auth,
+        // authorization, or rate-limit responses.
+        throw new Error(data.error || `請求失敗 (${res.status})`);
+      }
+      return data as T;
+    } catch (error) {
+      const externallyAborted = Boolean(options.signal?.aborted);
+      const isAbort = error instanceof DOMException && error.name === 'AbortError';
+      const isNetworkError = error instanceof TypeError;
+      const isTransient = !externallyAborted && (timedOut || isAbort || isNetworkError);
+      if (isTransient && attempt + 1 < attempts) continue;
+      if (timedOut || (isAbort && !externallyAborted)) {
+        throw new Error('伺服器回應時間較長，請稍候後再試。');
+      }
+      if (isNetworkError) {
+        throw new Error('網路連線暫時不穩定，請檢查連線後再試。');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+    }
   }
-  return data as T;
-  } finally { window.clearTimeout(timer); }
+
+  throw new Error('請求失敗');
 }
+
+const authRequestPolicy = { timeoutMs: 55000, retryTransientOnce: true } as const;
 
 export const api = {
   // Auth
@@ -55,9 +86,9 @@ export const api = {
     request<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(body),
-    }),
+    }, authRequestPolicy),
 
-  me: () => request<{ user: User & { memberships: Membership[] }; token?: string }>('/api/auth/me'),
+  me: () => request<{ user: User & { memberships: Membership[] }; token?: string }>('/api/auth/me', {}, authRequestPolicy),
 
   // Families
   createFamily: (name: string) =>

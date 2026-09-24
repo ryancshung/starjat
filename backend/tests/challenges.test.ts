@@ -239,6 +239,22 @@ test('valid legacy expiring tokens are upgraded by auth me to permanent tokens',
   const body=await response.json() as any;
   assert.ok(body.token);assert.equal(verifyToken(body.token,'test-secret').exp,undefined);
 });
+test('auth timing logs expose phases without credentials or tokens',async()=>{
+  const env={DATABASE_URL:'unused-test',JWT_SECRET:'test-secret'},app=createAuthRoutes(()=>db);
+  const token=signToken({...parent,email:'parent@test.invalid'},'test-secret');
+  const entries:string[]=[];const original=console.log;
+  console.log=(...values:unknown[])=>entries.push(values.map(String).join(' '));
+  try{
+    const response=await app.request('http://localhost/me',{headers:{Authorization:`Bearer ${token}`}},env);
+    assert.equal(response.status,200);
+  }finally{console.log=original;}
+  const timing=entries.map(value=>JSON.parse(value)).filter(value=>value.event==='auth_timing');
+  assert.deepEqual(timing.map(value=>value.stage),['T0_received','T1_db_connect_start','T2_db_ready','T3_sql_complete','T4_response_ready']);
+  assert.ok(timing.every(value=>Number.isInteger(value.totalMs)&&Number.isInteger(value.stepMs)));
+  const serialized=JSON.stringify(timing);
+  assert.equal(serialized.includes('parent@test.invalid'),false);
+  assert.equal(serialized.includes(token),false);
+});
 test('family-local midnight resets daily task and same-day legacy approval does not pay again',async()=>{
   const beforeMidnight=new Date('2026-09-07T15:59:59Z'),afterMidnight=new Date('2026-09-07T16:00:01Z');
   const a=await submit('task0',child,beforeMidnight),b=await submit('task0',child,afterMidnight);

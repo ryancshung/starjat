@@ -16,3 +16,19 @@ export function createPrisma(databaseUrl: string): PrismaClient {
   const adapter = new PrismaNeon({ connectionString: databaseUrl });
   return new PrismaClient({ adapter });
 }
+
+/**
+ * Close a request-scoped client after the response without putting WebSocket
+ * pool teardown on the production response path. Hono's app.request tests do
+ * not provide an ExecutionContext, so they deliberately fall back to waiting.
+ */
+export async function disconnectPrisma(
+  context: { executionCtx: { waitUntil(promise: Promise<unknown>): void } },
+  prisma: PrismaClient
+): Promise<void> {
+  try {
+    context.executionCtx.waitUntil(prisma.$disconnect());
+  } catch {
+    await prisma.$disconnect();
+  }
+}
