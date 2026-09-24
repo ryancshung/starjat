@@ -7,5 +7,11 @@
   "observability": {
     "enabled": true
   },
-  "triggers": { "crons": ["*/15 * * * *"] }
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "c73b0feb0ae9499a9e43e570669c3511"
+    }
+  ]
 }

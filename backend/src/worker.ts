@@ -14,6 +14,13 @@ import trophyRoutes from './worker-routes/trophies';
 import { runScheduledAwards } from './lib/scheduled-awards';
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
+type AppExecutionContext = Parameters<typeof app.fetch>[2];
+
+function runtimeEnv(env: WorkerEnv): WorkerEnv {
+  return env.HYPERDRIVE?.connectionString
+    ? { ...env, DATABASE_URL: env.HYPERDRIVE.connectionString }
+    : env;
+}
 
 app.use('/api/*', async (c, next) => {
   const allowedOrigins = (c.env.CORS_ORIGIN ?? '')
@@ -63,8 +70,9 @@ app.onError((error, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  fetch: (request: Request, env: WorkerEnv, ctx: AppExecutionContext) =>
+    app.fetch(request, runtimeEnv(env), ctx),
   scheduled: (_event: unknown, env: WorkerEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) => {
-    ctx.waitUntil(runScheduledAwards(env));
+    ctx.waitUntil(runScheduledAwards(runtimeEnv(env)));
   },
 };
